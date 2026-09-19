@@ -38,4 +38,4 @@ proto/mcp_bridge.proto
 ## Dummy HCM
 
 `dummy-hcm` listens on `:9090` with Basic `demo`/`demo` and a subset of
-`/hcmRestApi/resources/11.13.18.05/{workers,absences,…}`.
+`/hcmRestApi/resources/11.13.18.05/{workers,planBalances,businessProcessNotifications,allocatedChecklists,…}`.

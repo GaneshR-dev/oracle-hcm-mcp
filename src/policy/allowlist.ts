@@ -16,18 +16,35 @@ const BLOCKED_PATTERNS: RegExp[] = [
   /embedding/i,
 ];
 
-/** Curated resource roots allowed for generic get/mutate */
+/**
+ * Curated resource roots allowed for generic get/mutate.
+ * Primary Fusion names first; legacy aliases kept for compatibility.
+ */
 const ALLOWED_ROOTS = [
+  // Core people / absences
   'workers',
   'absences',
-  'absencesBalances',
+  'planBalances',
+  'absencesBalances', // legacy alias → planBalances
   'areasOfResponsibility',
   'allocatedChecklists',
+  // Business process notifications (legacy workflowNotifications aliased)
+  'businessProcessNotifications',
   'workflowNotifications',
+  // Assignments / public
   'workerAssignments',
   'emps',
   'publicWorkers',
   'hcmContacts',
+  // Org LOVs (P1)
+  'organizations',
+  'locations',
+  'jobs',
+  'grades',
+  // Time / talent / payroll (P1)
+  'timeRecords',
+  'talentPersonProfiles',
+  'payrollRelationships',
 ];
 
 export function normalizeResourcePath(path: string): string {

@@ -182,3 +182,50 @@ describe('ApprovalStore unit with TTL', () => {
     expect(() => store.deny(intent.approvalId)).toThrow(/expired|Unknown/i);
   });
 });
+
+describe('Fusion path alignment against dummy', () => {
+  it('reads planBalances and legacy absencesBalances alias', async () => {
+    const client = new HcmClient(testConfig());
+    const primary = await client.list('planBalances', { q: 'personNumber=P1001' });
+    expect(primary.items.length).toBeGreaterThan(0);
+    const legacy = await client.list('absencesBalances', { limit: 5 });
+    expect(legacy.items.length).toBeGreaterThan(0);
+    const one = await client.getJson<{ BalanceId: string }>('planBalances/B1');
+    expect(one.BalanceId).toBe('B1');
+  });
+
+  it('lists businessProcessNotifications and performAction', async () => {
+    const client = new HcmClient(testConfig());
+    const list = await client.list('businessProcessNotifications', { limit: 5 });
+    expect(list.items.length).toBeGreaterThan(0);
+    const result = await client.postJson<{ actionResult: string; Status: string }>(
+      'businessProcessNotifications/action/performAction',
+      { taskId: 'N1', actionName: 'APPROVE', comment: 'unit' },
+    );
+    expect(result.actionResult).toBe('OK');
+    expect(result.Status).toBe('APPROVE');
+  });
+
+  it('updates allocatedTasks via updateTaskStatus action', async () => {
+    const client = new HcmClient(testConfig());
+    const tasks = await client.list('allocatedChecklists/C1/child/allocatedTasks');
+    expect(tasks.items.length).toBeGreaterThan(0);
+    const updated = await client.postJson<{ status: string }>(
+      'allocatedChecklists/C1/child/allocatedTasks/T2/action/updateTaskStatus',
+      { status: 'COMPLETED' },
+    );
+    expect(updated.status).toBe('COMPLETED');
+  });
+
+  it('reads org LOVs, time, talent, payroll', async () => {
+    const client = new HcmClient(testConfig());
+    expect((await client.list('organizations')).items.length).toBeGreaterThan(0);
+    expect((await client.list('locations')).items.length).toBeGreaterThan(0);
+    expect((await client.list('jobs')).items.length).toBeGreaterThan(0);
+    expect((await client.list('grades')).items.length).toBeGreaterThan(0);
+    expect((await client.list('timeRecords')).items.length).toBeGreaterThan(0);
+    expect((await client.list('talentPersonProfiles')).items.length).toBeGreaterThan(0);
+    expect((await client.list('payrollRelationships')).items.length).toBeGreaterThan(0);
+    expect((await client.list('workerAssignments', { q: 'WorkerId=1001' })).items.length).toBeGreaterThan(0);
+  });
+});

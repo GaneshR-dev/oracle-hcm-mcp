@@ -10,9 +10,26 @@ Unofficial Model Context Protocol (MCP) server for **Oracle Fusion Cloud HCM** R
 
 ## Status
 
-v0.1 MVP — curated tools for workers, absences, areas of responsibility (AOR), allocated
-checklists/tasks, business-process notifications, meta helpers, and allowlisted generic REST.
-Perfect ADF coverage is **not** a goal of this release.
+v0.2 — curated tools aligned to Fusion path names (`planBalances`, `businessProcessNotifications`,
+`allocatedTasks`, org LOVs, time records, talent profiles, payroll relationships read-only).
+Perfect ADF coverage is **not** a goal. MCP tool names such as `hcm_absence_balance` stay stable;
+internals use Fusion REST paths.
+
+### Honest coverage
+
+| Domain | Curated tools | Fusion roots |
+|--------|---------------|--------------|
+| Workers + assignments | search/get/create/update + assignments deep-read | `workers`, `workerAssignments` |
+| Absences | CRUD | `absences` |
+| Plan balances | search + get (`hcm_absence_balance`, `hcm_get_plan_balance`) | **`planBalances`** |
+| AOR | CRUD | `areasOfResponsibility` |
+| Checklists / tasks | list/get + status update | `allocatedChecklists` / **`child/allocatedTasks`** |
+| BP notifications | list/get + performAction | **`businessProcessNotifications`** |
+| Org LOVs | orgs, locations, jobs, grades | `organizations`, `locations`, `jobs`, `grades` |
+| Time | search/get (read) | `timeRecords` |
+| Talent | search/get + light update | `talentPersonProfiles` |
+| Payroll | search/get (read-only) | `payrollRelationships` |
+| Generic | allowlisted get/mutate | see allowlist; **CE / generative AI blocked** |
 
 ## Safety modes
 
@@ -79,19 +96,27 @@ oracle-hcm-mcp --base-url http://127.0.0.1:9090/hcmRestApi
 
 Auth note: credentials open the HTTP door; **HCM RBAC** still decides what the user/app can do.
 
-## Tools (v1)
+## Tools (v0.2)
 
 **Meta:** `hcm_health`, `hcm_whoami`, `hcm_list_resources`, `hcm_describe_resource`
 
-**Workers:** `hcm_search_workers`, `hcm_get_worker`, `hcm_create_worker`, `hcm_update_worker`
+**Workers:** `hcm_search_workers`, `hcm_get_worker`, `hcm_get_worker_assignments`, `hcm_create_worker`, `hcm_update_worker`
 
-**Absences:** `hcm_search_absences`, `hcm_get_absence`, `hcm_create_absence`, `hcm_update_absence`, `hcm_delete_absence`, `hcm_absence_balance`
+**Absences / balances:** `hcm_search_absences`, `hcm_get_absence`, `hcm_create_absence`, `hcm_update_absence`, `hcm_delete_absence`, `hcm_absence_balance` → `planBalances`, `hcm_get_plan_balance`
 
 **AOR:** `hcm_search_aor`, `hcm_get_aor`, `hcm_create_aor`, `hcm_update_aor`, `hcm_delete_aor`
 
-**Checklists:** `hcm_list_checklists`, `hcm_get_checklist`, `hcm_update_task_status`
+**Checklists:** `hcm_list_checklists`, `hcm_get_checklist`, `hcm_update_task_status` → `child/allocatedTasks/…/action/updateTaskStatus`
 
-**BP / notifications:** `hcm_list_notifications`, `hcm_get_notification`, `hcm_perform_bp_action`
+**BP / notifications:** `hcm_list_notifications`, `hcm_get_notification`, `hcm_perform_bp_action` → `businessProcessNotifications/action/performAction`
+
+**Org LOVs:** `hcm_search_organizations`, `hcm_get_organization`, `hcm_search_locations`, `hcm_get_location`, `hcm_search_jobs`, `hcm_get_job`, `hcm_search_grades`, `hcm_get_grade`
+
+**Time:** `hcm_search_time_records`, `hcm_get_time_record`
+
+**Talent:** `hcm_search_talent_profiles`, `hcm_get_talent_profile`, `hcm_update_talent_profile`
+
+**Payroll (read-only):** `hcm_search_payroll_relationships`, `hcm_get_payroll_relationship`
 
 **Generic (allowlisted):** `hcm_rest_get`, `hcm_rest_mutate`
 

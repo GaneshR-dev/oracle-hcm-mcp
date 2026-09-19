@@ -13,6 +13,12 @@ describe('classify', () => {
     expect(classifyTool('hcm_search_workers')).toBe('read');
     expect(classifyTool('hcm_rest_get')).toBe('read');
     expect(isReadTool('hcm_get_absence')).toBe(true);
+    expect(classifyTool('hcm_absence_balance')).toBe('read');
+    expect(classifyTool('hcm_get_plan_balance')).toBe('read');
+    expect(classifyTool('hcm_search_organizations')).toBe('read');
+    expect(classifyTool('hcm_search_time_records')).toBe('read');
+    expect(classifyTool('hcm_search_payroll_relationships')).toBe('read');
+    expect(classifyTool('hcm_get_worker_assignments')).toBe('read');
   });
 
   it('classifies known writes', () => {
@@ -20,6 +26,7 @@ describe('classify', () => {
     expect(classifyTool('hcm_delete_absence')).toBe('write');
     expect(classifyTool('hcm_rest_mutate')).toBe('write');
     expect(isWriteTool('hcm_perform_bp_action')).toBe(true);
+    expect(classifyTool('hcm_update_talent_profile')).toBe('write');
   });
 
   it('defaults unknown hcm_* to write', () => {
@@ -29,11 +36,29 @@ describe('classify', () => {
 });
 
 describe('allowlist', () => {
-  it('allows curated roots', () => {
+  it('allows curated Fusion roots', () => {
     expect(isAllowlistedPath('workers')).toBe(true);
     expect(isAllowlistedPath('workers/1001')).toBe(true);
     expect(isAllowlistedPath('/absences?limit=1')).toBe(true);
     expect(isAllowlistedPath('areasOfResponsibility/R1')).toBe(true);
+    expect(isAllowlistedPath('planBalances')).toBe(true);
+    expect(isAllowlistedPath('planBalances/B1')).toBe(true);
+    expect(isAllowlistedPath('businessProcessNotifications')).toBe(true);
+    expect(isAllowlistedPath('businessProcessNotifications/action/performAction')).toBe(true);
+    expect(isAllowlistedPath('allocatedChecklists/C1/child/allocatedTasks/T1')).toBe(true);
+    expect(isAllowlistedPath('organizations')).toBe(true);
+    expect(isAllowlistedPath('locations')).toBe(true);
+    expect(isAllowlistedPath('jobs')).toBe(true);
+    expect(isAllowlistedPath('grades')).toBe(true);
+    expect(isAllowlistedPath('timeRecords')).toBe(true);
+    expect(isAllowlistedPath('talentPersonProfiles')).toBe(true);
+    expect(isAllowlistedPath('payrollRelationships')).toBe(true);
+    expect(isAllowlistedPath('workerAssignments')).toBe(true);
+  });
+
+  it('keeps legacy aliases allowlisted', () => {
+    expect(isAllowlistedPath('absencesBalances')).toBe(true);
+    expect(isAllowlistedPath('workflowNotifications')).toBe(true);
   });
 
   it('blocks CE / generative AI style paths', () => {

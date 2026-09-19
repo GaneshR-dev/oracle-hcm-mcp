@@ -2,10 +2,11 @@
 /**
  * Dummy Oracle HCM REST mock for local E2E tests.
  * Unofficial — not affiliated with Oracle. Basic auth demo/demo.
+ * Uses Fusion path names (planBalances, businessProcessNotifications, allocatedTasks).
  */
 
 import express from 'express';
-import { seedStore, type Store } from './data.js';
+import { seedStore, type Store, type ChecklistTask } from './data.js';
 
 const API = '/hcmRestApi/resources/11.13.18.05';
 const PORT = Number(process.env.DUMMY_HCM_PORT ?? 9090);
@@ -36,14 +37,20 @@ function collection<T>(items: T[]) {
 
 function matchQ<T extends Record<string, unknown>>(items: T[], q?: string): T[] {
   if (!q) return items;
-  // very small ADF-ish filter: key=value or key LIKE 'x' / contains
   const m = q.match(/^(\w+)\s*=\s*'?([^']+)'?$/i);
   if (m) {
     const [, key, val] = m;
-    return items.filter((it) => String(it[key] ?? it[key as keyof T] ?? '') === val);
+    return items.filter((it) => String(it[key] ?? '') === val);
   }
   const lower = q.toLowerCase();
   return items.filter((it) => JSON.stringify(it).toLowerCase().includes(lower));
+}
+
+function findTask(c: { allocatedTasks: ChecklistTask[]; tasks?: ChecklistTask[] }, taskId: string) {
+  return (
+    c.allocatedTasks.find((x) => x.TaskId === taskId || x.AllocatedTaskId === taskId) ??
+    c.tasks?.find((x) => x.TaskId === taskId || x.AllocatedTaskId === taskId)
+  );
 }
 
 export function createDummyApp(store?: Store): express.Express {
@@ -68,7 +75,14 @@ export function createDummyApp(store?: Store): express.Express {
   app.get(`${API}/workers/:id`, (req, res) => {
     const w = s.workers.find((x) => x.WorkerId === req.params.id);
     if (!w) return res.status(404).json({ error: 'Not found' });
-    res.json(w);
+    const expand = String(req.query.expand ?? '');
+    if (expand.includes('workRelationships') || expand.includes('assignments')) {
+      return res.json(w);
+    }
+    // Strip nested expand payload when not requested (still include ids)
+    const { workRelationships: _wr, ...rest } = w;
+    void _wr;
+    res.json({ ...rest, workRelationships: w.workRelationships });
   });
 
   app.post(`${API}/workers`, (req, res) => {
@@ -81,6 +95,7 @@ export function createDummyApp(store?: Store): express.Express {
       FirstName: body.FirstName ?? 'New',
       LastName: body.LastName ?? 'Worker',
       emails: body.emails,
+      workRelationships: [],
     };
     s.workers.push(w);
     res.status(201).json(w);
@@ -91,6 +106,39 @@ export function createDummyApp(store?: Store): express.Express {
     if (!w) return res.status(404).json({ error: 'Not found' });
     Object.assign(w, req.body);
     res.json(w);
+  });
+
+  // Nested assignments under workers (Fusion-shaped)
+  app.get(`${API}/workers/:id/child/workRelationships`, (req, res) => {
+    const w = s.workers.find((x) => x.WorkerId === req.params.id);
+    if (!w) return res.status(404).json({ error: 'Not found' });
+    res.json(collection(w.workRelationships ?? []));
+  });
+
+  app.get(
+    `${API}/workers/:id/child/workRelationships/:wrId/child/assignments`,
+    (req, res) => {
+      const w = s.workers.find((x) => x.WorkerId === req.params.id);
+      if (!w) return res.status(404).json({ error: 'Not found' });
+      const wr = w.workRelationships?.find((x) => x.PeriodOfServiceId === req.params.wrId);
+      if (!wr) return res.status(404).json({ error: 'WR not found' });
+      res.json(collection(wr.assignments));
+    },
+  );
+
+  // Top-level workerAssignments (allowlisted deep-read helper)
+  app.get(`${API}/workerAssignments`, (req, res) => {
+    const items = matchQ(
+      s.workerAssignments as unknown as Record<string, unknown>[],
+      req.query.q as string,
+    );
+    res.json(collection(items));
+  });
+
+  app.get(`${API}/workerAssignments/:id`, (req, res) => {
+    const a = s.workerAssignments.find((x) => x.AssignmentId === req.params.id);
+    if (!a) return res.status(404).json({ error: 'Not found' });
+    res.json(a);
   });
 
   // Absences
@@ -133,9 +181,23 @@ export function createDummyApp(store?: Store): express.Express {
     res.status(204).end();
   });
 
-  app.get(`${API}/absencesBalances`, (req, res) => {
+  // Plan balances (primary) + legacy absencesBalances alias
+  const listBalances = (req: express.Request, res: express.Response) => {
     const items = matchQ(s.balances as unknown as Record<string, unknown>[], req.query.q as string);
     res.json(collection(items));
+  };
+  app.get(`${API}/planBalances`, listBalances);
+  app.get(`${API}/absencesBalances`, listBalances);
+
+  app.get(`${API}/planBalances/:id`, (req, res) => {
+    const b = s.balances.find((x) => x.BalanceId === req.params.id);
+    if (!b) return res.status(404).json({ error: 'Not found' });
+    res.json(b);
+  });
+  app.get(`${API}/absencesBalances/:id`, (req, res) => {
+    const b = s.balances.find((x) => x.BalanceId === req.params.id);
+    if (!b) return res.status(404).json({ error: 'Not found' });
+    res.json(b);
   });
 
   // AOR
@@ -176,7 +238,7 @@ export function createDummyApp(store?: Store): express.Express {
     res.status(204).end();
   });
 
-  // Checklists
+  // Checklists + allocatedTasks
   app.get(`${API}/allocatedChecklists`, (req, res) => {
     const items = matchQ(
       s.checklists as unknown as Record<string, unknown>[],
@@ -191,38 +253,181 @@ export function createDummyApp(store?: Store): express.Express {
     res.json(c);
   });
 
-  app.patch(`${API}/allocatedChecklists/:id/child/tasks/:taskId`, (req, res) => {
+  app.get(`${API}/allocatedChecklists/:id/child/allocatedTasks`, (req, res) => {
     const c = s.checklists.find((x) => x.AllocatedChecklistId === req.params.id);
     if (!c) return res.status(404).json({ error: 'Checklist not found' });
-    const t = c.tasks.find((x) => x.TaskId === req.params.taskId);
+    res.json(collection(c.allocatedTasks));
+  });
+
+  app.get(`${API}/allocatedChecklists/:id/child/allocatedTasks/:taskId`, (req, res) => {
+    const c = s.checklists.find((x) => x.AllocatedChecklistId === req.params.id);
+    if (!c) return res.status(404).json({ error: 'Checklist not found' });
+    const t = findTask(c, req.params.taskId);
     if (!t) return res.status(404).json({ error: 'Task not found' });
-    Object.assign(t, req.body);
     res.json(t);
   });
 
-  // Notifications / BP
-  app.get(`${API}/workflowNotifications`, (req, res) => {
+  const updateTask = (req: express.Request, res: express.Response) => {
+    const c = s.checklists.find((x) => x.AllocatedChecklistId === String(req.params.id));
+    if (!c) return res.status(404).json({ error: 'Checklist not found' });
+    const t = findTask(c, String(req.params.taskId));
+    if (!t) return res.status(404).json({ error: 'Task not found' });
+    const status = req.body?.status ?? req.body?.TaskStatus ?? req.body?.taskStatus;
+    Object.assign(t, req.body ?? {});
+    if (status) t.status = String(status);
+    res.json(t);
+  };
+
+  app.patch(`${API}/allocatedChecklists/:id/child/allocatedTasks/:taskId`, updateTask);
+  app.post(
+    `${API}/allocatedChecklists/:id/child/allocatedTasks/:taskId/action/updateTaskStatus`,
+    updateTask,
+  );
+  // Legacy child/tasks alias
+  app.patch(`${API}/allocatedChecklists/:id/child/tasks/:taskId`, updateTask);
+
+  // Business process notifications (primary) + legacy workflowNotifications
+  const listNotifs = (req: express.Request, res: express.Response) => {
     const items = matchQ(
       s.notifications as unknown as Record<string, unknown>[],
       req.query.q as string,
     );
     res.json(collection(items));
-  });
+  };
+  app.get(`${API}/businessProcessNotifications`, listNotifs);
+  app.get(`${API}/workflowNotifications`, listNotifs);
 
-  app.get(`${API}/workflowNotifications/:id`, (req, res) => {
-    const n = s.notifications.find((x) => x.NotificationId === req.params.id);
+  const getNotif = (req: express.Request, res: express.Response) => {
+    const n = s.notifications.find(
+      (x) => x.NotificationId === req.params.id || x.taskId === req.params.id,
+    );
     if (!n) return res.status(404).json({ error: 'Not found' });
     res.json(n);
-  });
+  };
+  app.get(`${API}/businessProcessNotifications/:id`, getNotif);
+  app.get(`${API}/workflowNotifications/:id`, getNotif);
 
-  app.post(`${API}/workflowNotifications/:id/action/:action`, (req, res) => {
-    const n = s.notifications.find((x) => x.NotificationId === req.params.id);
+  const performBp = (req: express.Request, res: express.Response) => {
+    const id =
+      req.body?.taskId ??
+      req.body?.notificationId ??
+      req.params.id ??
+      req.body?.IdentificationKey;
+    const action =
+      req.body?.actionName ?? req.body?.action ?? req.params.action ?? 'APPROVE';
+    const n = s.notifications.find(
+      (x) => x.NotificationId === String(id) || x.taskId === String(id),
+    );
     if (!n) return res.status(404).json({ error: 'Not found' });
-    n.Status = String(req.params.action).toUpperCase();
+    n.Status = String(action).toUpperCase();
     res.json({ ...n, actionResult: 'OK', comment: req.body?.comment });
+  };
+
+  app.post(`${API}/businessProcessNotifications/action/performAction`, performBp);
+  app.post(`${API}/businessProcessNotifications/action/performActionWithComments`, performBp);
+  // Legacy shaped paths
+  app.post(`${API}/workflowNotifications/:id/action/:action`, performBp);
+  app.post(`${API}/businessProcessNotifications/:id/action/:action`, performBp);
+
+  // Org LOVs
+  app.get(`${API}/organizations`, (req, res) => {
+    res.json(
+      collection(
+        matchQ(s.organizations as unknown as Record<string, unknown>[], req.query.q as string),
+      ),
+    );
+  });
+  app.get(`${API}/organizations/:id`, (req, res) => {
+    const o = s.organizations.find((x) => x.OrganizationId === req.params.id);
+    if (!o) return res.status(404).json({ error: 'Not found' });
+    res.json(o);
   });
 
-  // Blocklist demo: generative AI style path returns 404-ish policy message if hit via raw HTTP
+  app.get(`${API}/locations`, (req, res) => {
+    res.json(
+      collection(matchQ(s.locations as unknown as Record<string, unknown>[], req.query.q as string)),
+    );
+  });
+  app.get(`${API}/locations/:id`, (req, res) => {
+    const o = s.locations.find((x) => x.LocationId === req.params.id);
+    if (!o) return res.status(404).json({ error: 'Not found' });
+    res.json(o);
+  });
+
+  app.get(`${API}/jobs`, (req, res) => {
+    res.json(
+      collection(matchQ(s.jobs as unknown as Record<string, unknown>[], req.query.q as string)),
+    );
+  });
+  app.get(`${API}/jobs/:id`, (req, res) => {
+    const o = s.jobs.find((x) => x.JobId === req.params.id);
+    if (!o) return res.status(404).json({ error: 'Not found' });
+    res.json(o);
+  });
+
+  app.get(`${API}/grades`, (req, res) => {
+    res.json(
+      collection(matchQ(s.grades as unknown as Record<string, unknown>[], req.query.q as string)),
+    );
+  });
+  app.get(`${API}/grades/:id`, (req, res) => {
+    const o = s.grades.find((x) => x.GradeId === req.params.id);
+    if (!o) return res.status(404).json({ error: 'Not found' });
+    res.json(o);
+  });
+
+  // Time records
+  app.get(`${API}/timeRecords`, (req, res) => {
+    res.json(
+      collection(
+        matchQ(s.timeRecords as unknown as Record<string, unknown>[], req.query.q as string),
+      ),
+    );
+  });
+  app.get(`${API}/timeRecords/:id`, (req, res) => {
+    const o = s.timeRecords.find((x) => x.timeRecordId === req.params.id);
+    if (!o) return res.status(404).json({ error: 'Not found' });
+    res.json(o);
+  });
+
+  // Talent profiles
+  app.get(`${API}/talentPersonProfiles`, (req, res) => {
+    res.json(
+      collection(
+        matchQ(s.talentProfiles as unknown as Record<string, unknown>[], req.query.q as string),
+      ),
+    );
+  });
+  app.get(`${API}/talentPersonProfiles/:id`, (req, res) => {
+    const o = s.talentProfiles.find((x) => x.ProfileId === req.params.id);
+    if (!o) return res.status(404).json({ error: 'Not found' });
+    res.json(o);
+  });
+  app.patch(`${API}/talentPersonProfiles/:id`, (req, res) => {
+    const o = s.talentProfiles.find((x) => x.ProfileId === req.params.id);
+    if (!o) return res.status(404).json({ error: 'Not found' });
+    Object.assign(o, req.body);
+    res.json(o);
+  });
+
+  // Payroll relationships (read-only in MCP; GET only here)
+  app.get(`${API}/payrollRelationships`, (req, res) => {
+    res.json(
+      collection(
+        matchQ(
+          s.payrollRelationships as unknown as Record<string, unknown>[],
+          req.query.q as string,
+        ),
+      ),
+    );
+  });
+  app.get(`${API}/payrollRelationships/:id`, (req, res) => {
+    const o = s.payrollRelationships.find((x) => x.PayrollRelationshipId === req.params.id);
+    if (!o) return res.status(404).json({ error: 'Not found' });
+    res.json(o);
+  });
+
+  // Blocklist demo
   app.all(`${API}/ce/*path`, (_req, res) => {
     res.status(403).json({ error: 'Blocked by dummy policy (CE paths)' });
   });

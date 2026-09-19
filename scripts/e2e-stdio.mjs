@@ -90,8 +90,8 @@ async function runApprovalMode() {
     const hasApproval = APPROVAL_TOOLS.every((n) => names.includes(n));
     record(
       section,
-      'listTools — approval tools present, ~30 tools',
-      hasApproval && names.length >= 28 && names.length <= 35,
+      'listTools — approval tools present, curated suite',
+      hasApproval && names.length >= 40 && names.length <= 60,
       `count=${names.length}; approval=${hasApproval}; tools=${names.join(',')}`,
     );
 
@@ -162,9 +162,27 @@ async function runApprovalMode() {
     const bal = await call(client, 'hcm_absence_balance', { personNumber: 'P1001' });
     record(
       section,
-      'hcm_absence_balance',
+      'hcm_absence_balance (planBalances)',
       !bal.isError && (bal.data.items?.length ?? 0) > 0,
       JSON.stringify(bal.data).slice(0, 200),
+    );
+
+    const planBal = await call(client, 'hcm_get_plan_balance', { balanceId: 'B1' });
+    record(
+      section,
+      'hcm_get_plan_balance',
+      !planBal.isError && String(planBal.data.BalanceId) === 'B1',
+      JSON.stringify(planBal.data).slice(0, 200),
+    );
+
+    const assignments = await call(client, 'hcm_get_worker_assignments', { workerId: String(workerId) });
+    record(
+      section,
+      'hcm_get_worker_assignments',
+      !assignments.isError &&
+        (Array.isArray(assignments.data.workRelationships) ||
+          (assignments.data.items?.length ?? 0) > 0),
+      JSON.stringify(assignments.data).slice(0, 200),
     );
 
     const aors = await call(client, 'hcm_search_aor', { limit: 10 });
@@ -213,9 +231,63 @@ async function runApprovalMode() {
     });
     record(
       section,
-      'hcm_get_notification',
+      'hcm_get_notification (businessProcessNotifications)',
       !notif.isError && String(notif.data.NotificationId) === String(notificationId),
       JSON.stringify(notif.data).slice(0, 200),
+    );
+
+    // P1 org LOVs / time / talent / payroll
+    const orgs = await call(client, 'hcm_search_organizations', { limit: 10 });
+    record(
+      section,
+      'hcm_search_organizations',
+      !orgs.isError && (orgs.data.items?.length ?? 0) > 0,
+      `count=${(orgs.data.items ?? []).length}`,
+    );
+    const org = await call(client, 'hcm_get_organization', { organizationId: 'O1' });
+    record(section, 'hcm_get_organization', !org.isError && org.data.OrganizationId === 'O1', JSON.stringify(org.data).slice(0, 120));
+
+    const locs = await call(client, 'hcm_search_locations', { limit: 10 });
+    record(section, 'hcm_search_locations', !locs.isError && (locs.data.items?.length ?? 0) > 0, `count=${(locs.data.items ?? []).length}`);
+    const loc = await call(client, 'hcm_get_location', { locationId: 'L1' });
+    record(section, 'hcm_get_location', !loc.isError && loc.data.LocationId === 'L1', JSON.stringify(loc.data).slice(0, 120));
+
+    const jobs = await call(client, 'hcm_search_jobs', { limit: 10 });
+    record(section, 'hcm_search_jobs', !jobs.isError && (jobs.data.items?.length ?? 0) > 0, `count=${(jobs.data.items ?? []).length}`);
+    const job = await call(client, 'hcm_get_job', { jobId: 'J1' });
+    record(section, 'hcm_get_job', !job.isError && job.data.JobId === 'J1', JSON.stringify(job.data).slice(0, 120));
+
+    const grades = await call(client, 'hcm_search_grades', { limit: 10 });
+    record(section, 'hcm_search_grades', !grades.isError && (grades.data.items?.length ?? 0) > 0, `count=${(grades.data.items ?? []).length}`);
+
+    const times = await call(client, 'hcm_search_time_records', { limit: 10 });
+    record(section, 'hcm_search_time_records', !times.isError && (times.data.items?.length ?? 0) > 0, `count=${(times.data.items ?? []).length}`);
+    const tr = await call(client, 'hcm_get_time_record', { timeRecordId: 'TR1' });
+    record(section, 'hcm_get_time_record', !tr.isError && tr.data.timeRecordId === 'TR1', JSON.stringify(tr.data).slice(0, 120));
+
+    const talent = await call(client, 'hcm_search_talent_profiles', { limit: 10 });
+    record(section, 'hcm_search_talent_profiles', !talent.isError && (talent.data.items?.length ?? 0) > 0, `count=${(talent.data.items ?? []).length}`);
+    const tp = await call(client, 'hcm_get_talent_profile', { profileId: 'TP1' });
+    record(section, 'hcm_get_talent_profile', !tp.isError && tp.data.ProfileId === 'TP1', JSON.stringify(tp.data).slice(0, 120));
+
+    const payroll = await call(client, 'hcm_search_payroll_relationships', { limit: 10 });
+    record(section, 'hcm_search_payroll_relationships', !payroll.isError && (payroll.data.items?.length ?? 0) > 0, `count=${(payroll.data.items ?? []).length}`);
+    const pr = await call(client, 'hcm_get_payroll_relationship', { payrollRelationshipId: 'PR1' });
+    record(section, 'hcm_get_payroll_relationship', !pr.isError && pr.data.PayrollRelationshipId === 'PR1', JSON.stringify(pr.data).slice(0, 120));
+
+    // Path probes via rest_get
+    const restPlan = await call(client, 'hcm_rest_get', { path: 'planBalances', query: { limit: 2 } });
+    record(section, 'hcm_rest_get planBalances', !restPlan.isError && (restPlan.data.items?.length ?? 0) > 0, JSON.stringify(restPlan.data).slice(0, 120));
+    const restBp = await call(client, 'hcm_rest_get', { path: 'businessProcessNotifications', query: { limit: 2 } });
+    record(section, 'hcm_rest_get businessProcessNotifications', !restBp.isError && (restBp.data.items?.length ?? 0) > 0, JSON.stringify(restBp.data).slice(0, 120));
+    const restTasks = await call(client, 'hcm_rest_get', {
+      path: `allocatedChecklists/${checklistId}/child/allocatedTasks`,
+    });
+    record(
+      section,
+      'hcm_rest_get allocatedTasks',
+      !restTasks.isError && (restTasks.data.items?.length ?? 0) > 0,
+      JSON.stringify(restTasks.data).slice(0, 120),
     );
 
     const restGet = await call(client, 'hcm_rest_get', { path: 'workers', query: { limit: 2 } });
@@ -444,7 +516,7 @@ async function runWriteMode() {
       JSON.stringify(delR.data).slice(0, 200),
     );
 
-    // Task status
+    // Task status via allocatedTasks/action/updateTaskStatus
     const task = await call(client, 'hcm_update_task_status', {
       checklistId: 'C1',
       taskId: 'T1',
@@ -452,12 +524,24 @@ async function runWriteMode() {
     });
     record(
       section,
-      'hcm_update_task_status immediate',
+      'hcm_update_task_status immediate (allocatedTasks)',
       !task.isError && noPending(task.data) && task.data.status === 'COMPLETED',
       JSON.stringify(task.data).slice(0, 200),
     );
 
-    // BP action (dummy supports POST .../action/:action)
+    // Talent light update
+    const talentUpd = await call(client, 'hcm_update_talent_profile', {
+      profileId: 'TP1',
+      body: { Summary: 'E2E updated summary' },
+    });
+    record(
+      section,
+      'hcm_update_talent_profile immediate',
+      !talentUpd.isError && noPending(talentUpd.data) && talentUpd.data.Summary === 'E2E updated summary',
+      JSON.stringify(talentUpd.data).slice(0, 200),
+    );
+
+    // BP action via businessProcessNotifications/action/performAction
     const bp = await call(client, 'hcm_perform_bp_action', {
       notificationId: 'N1',
       action: 'APPROVE',
@@ -549,7 +633,7 @@ function writeReport() {
   lines.push(
     '- `hcm_rest_mutate` to CE/generative-AI style paths is rejected by allowlist/blocklist before pending approval or execution.',
   );
-  lines.push('- Dummy HCM supports workers, absences, balances, AOR, checklists/tasks, and BP notification actions.', '');
+  lines.push('- Dummy HCM covers Fusion paths: planBalances, businessProcessNotifications, allocatedTasks, org LOVs, timeRecords, talentPersonProfiles, payrollRelationships.', '');
 
   fs.writeFileSync(REPORT_PATH, lines.join('\n'));
   console.log(`\nWrote ${REPORT_PATH}`);
