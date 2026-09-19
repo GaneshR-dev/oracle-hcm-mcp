@@ -1,6 +1,6 @@
 # Oracle HCM MCP — E2E Report
 
-- Date: 2026-09-19T14:40:35.938Z (box UTC; user zone Asia/Calcutta)
+- Date: 2026-09-19T15:58:10.035Z (box UTC; user zone Asia/Calcutta)
 - Target: http://127.0.0.1:9090 (dummy HCM, basic auth demo/demo)
 - Script: scripts/e2e-stdio.mjs (MCP Client + StdioClientTransport)
 - Server: node dist/index.js [ --write ]  (v0.7.0)
@@ -51,10 +51,10 @@
 | hcm_rest_get businessProcessNotifications | PASS | `{"items":[{"NotificationId":"N1","taskId":"N1","Subject":"Absence approval for Ada","Status":"OPEN","Assignee":"P1002"}]` |
 | hcm_rest_get allocatedTasks | PASS | `{"items":[{"TaskId":"T1","AllocatedTaskId":"T1","TaskName":"Complete I9","status":"IN_PROGRESS"},{"TaskId":"T2","Allocat` |
 | hcm_rest_get | PASS | `{"items":[{"WorkerId":"1001","PersonNumber":"P1001","DisplayName":"Ada Lovelace","FirstName":"Ada","LastName":"Lovelace","emails":[{"EmailAddress":"********.com"}],"workRelationships":[{"PeriodOfServi` |
-| hcm_create_absence → pending_approval | PASS | `{"pending_approval":true,"approval_id":"f71d9815-537b-4c37-b18a-58bf3a0527e0","tool":"hcm_create_absence","summary":"hcm_create_absence(body={\"personNumber\":\"P1001\",\"absenceType\":\"Vacation\",\"startDate\":\"2026-12-01\",\"endDa)","expires_at":"2026-09-19T14:55:34.222Z","message":"Write queued` |
+| hcm_create_absence → pending_approval | PASS | `{"pending_approval":true,"approval_id":"ff992b82-faa1-4108-b0dd-2aeeeaeefad2","tool":"hcm_create_absence","summary":"hcm_create_absence(body={\"personNumber\":\"P1001\",\"absenceType\":\"Vacation\",\"startDate\":\"2026-12-01\",\"endDa)","expires_at":"2026-09-19T16:13:08.313Z","message":"Write queued` |
 | hcm_list_pending_approvals | PASS | `pending=1` |
-| hcm_deny_write | PASS | `{"denied":true,"approval_id":"94aa9eca-2f1d-43f7-8966-9bf89cd58efc","tool":"hcm_create_absence"}` |
-| hcm_approve_write | PASS | `{"approved":true,"approval_id":"ed20922b-3ae9-426c-9534-a82a16c87ff9","tool":"hcm_create_absence","result":{"AbsenceId":"A2001","personNumber":"P1001","absenceType":"Vacation","startDate":"2026-12-20","endDate":"2026-12-21","status":"SUBMITTED"}}` |
+| hcm_deny_write | PASS | `{"denied":true,"approval_id":"0068ddcc-f278-409a-9c12-93d80159bc8e","tool":"hcm_create_absence"}` |
+| hcm_approve_write | PASS | `{"approved":true,"approval_id":"427071de-6833-4d1c-a76a-3c7c60c30e3e","tool":"hcm_create_absence","result":{"AbsenceId":"A2001","personNumber":"P1001","absenceType":"Vacation","startDate":"2026-12-20","endDate":"2026-12-21","status":"SUBMITTED"}}` |
 | verify approved absence via hcm_get_absence | PASS | `{"AbsenceId":"A2001","personNumber":"P1001","absenceType":"Vacation","startDate":"2026-12-20","endDate":"2026-12-21","status":"SUBMITTED"}` |
 | verify via hcm_search_absences | PASS | `items=1` |
 | hcm_rest_mutate blocklisted path → fail/block | PASS | `{"error":"Path blocked by policy (Oracle-internal / CE generative AI style paths are not allowed): ce/generativeAi/chat"}` |
@@ -91,10 +91,10 @@
 
 | Step | Result | Detail |
 | --- | --- | --- |
-| pending payload never includes approval token | PASS | `{"pending_approval":true,"approval_id":"ab738dba-3dff-4399-87ef-b4ee0b2c3943","tool":"hcm_create_absence","summary":"hcm_create_absence(body={\"personNumber\":\"P1001\",\"absenceType\":\"Vacation\",\"startDate\":\"2026-11-01\"})","expires_at":"2026-09-19T14:55:35.242Z","message":"Write queued for a ` |
+| pending payload never includes approval token | PASS | `{"pending_approval":true,"approval_id":"ccfdd366-7a8d-44a7-8ad0-446a45c61785","tool":"hcm_create_absence","summary":"hcm_create_absence(body={\"personNumber\":\"P1001\",\"absenceType\":\"Vacation\",\"startDate\":\"2026-11-01\"})","expires_at":"2026-09-19T16:13:09.342Z","message":"Write queued for a ` |
 | approve without token fails | PASS | `{"_raw":"MCP error -32602: Input validation error: Invalid arguments for tool hcm_approve_write: Required at approval_token"}` |
 | approve with wrong token fails | PASS | `{"error":"Invalid or missing approval_token. Pass the human/ops token from ORACLE_HCM_APPROVAL_TOKEN — it is never included in pending_approval payloads."}` |
-| deny with correct split-principal token works | PASS | `{"denied":true,"approval_id":"ab738dba-3dff-4399-87ef-b4ee0b2c3943","tool":"hcm_create_absence"}` |
+| deny with correct split-principal token works | PASS | `{"denied":true,"approval_id":"ccfdd366-7a8d-44a7-8ad0-446a45c61785","tool":"hcm_create_absence"}` |
 | path traversal rest_get blocked | PASS | `{"error":"Path traversal rejected: workers/../ce/foo"}` |
 | encoded .. rest_get blocked | PASS | `{"error":"Path traversal rejected: workers/%2e%2e/ce"}` |
 | scheme rest_get blocked | PASS | `{"error":"Absolute / scheme-relative paths are not allowed: https://evil.example/workers"}` |
@@ -113,7 +113,7 @@
 | hcm_search_document_records | PASS | `{"items":[{"DocumentRecordId":"DR1","PersonNumber":"P1001","DocumentType":"I9","FileName":"i9.pdf","UploadedAt":"2026-01-10T10:00:00Z","Status":"ACTIVE"}],"count":1,"hasMore":false}` |
 | hcm_search_talent_pools | PASS | `{"items":[{"TalentPoolId":"TPOL1","PoolName":"High Potential IC","Status":"A","MemberCount":2}],"count":1,"hasMore":false}` |
 | hcm_preview_write dry-run | PASS | `{"dry_run":true,"toolName":"hcm_create_absence","args":{"body":{"personNumber":"P1001","absenceType":"Vacation","startDate":"2026-11-15"}},"inferredMethod":"POST","inferredPath":null,"writeMode":false` |
-| hcm_recipe_transfer → pending_approval | PASS | `{"pending_approval":true,"approval_id":"e8107161-484c-4f4f-9c7f-6d08a4d834f7","tool":"hcm_recipe_transfer","summary":"hcm_recipe_transfer(workerId=1001, body={\"OrganizationId\":\"O1\"})","expires_at"` |
+| hcm_recipe_transfer → pending_approval | PASS | `{"pending_approval":true,"approval_id":"13077904-2028-438f-ba87-2a31ea7350c3","tool":"hcm_recipe_transfer","summary":"hcm_recipe_transfer(workerId=1001, body={\"OrganizationId\":\"O1\"})","expires_at"` |
 | hcm_atom_poll | PASS | `{"feedId":"atom:workers","checkpoint":null,"cursorUsed":null,"count":2,"entries":[{"entryId":"AE1","title":"Worker 1001 updated","updated":"2026-09-18T10:00:00Z","published":"2026-09-18T10:00:00Z","co` |
 | hcm_field_map | PASS | `{"entries":[{"oracle":"PersonNumber","friendly":"person_number","domain":"worker"},{"oracle":"WorkerId","friendly":"worker_id","domain":"worker"},{"oracle":"DisplayName","friendly":"display_name","dom` |
 
