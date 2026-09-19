@@ -1,5 +1,7 @@
 (function () {
   const $ = (id) => document.getElementById(id);
+  let lastPending = [];
+
   async function callTool(name, args) {
     const base = $('base').value.replace(/\/+$/, '');
     const res = await fetch(base + '/mcp', {
@@ -17,28 +19,61 @@
     return text ? JSON.parse(text) : data;
   }
 
+  function domainOf(tool) {
+    const n = String(tool || '').toLowerCase();
+    if (n.includes('absence') || n.includes('entitlement') || n.includes('accrual')) return 'absence';
+    if (n.includes('worker') || n.includes('assignment') || n.includes('transfer') || n.includes('terminate') || n.includes('promote') || n.includes('contingent')) return 'worker';
+    if (n.includes('learning') || n.includes('goal')) return 'learning';
+    if (n.includes('compensat') || n.includes('salary') || n.includes('payroll') || n.includes('element')) return 'compensation';
+    if (n.includes('document')) return 'documents';
+    if (n.includes('journey') || n.includes('checklist')) return 'journeys';
+    if (n.includes('feedback') || n.includes('check_in') || n.includes('review') || n.includes('performance')) return 'performance';
+    if (n.includes('benefit')) return 'benefits';
+    if (n.includes('recruit') || n.includes('candidate') || n.includes('offer')) return 'recruiting';
+    if (n.includes('webhook') || n.includes('atom') || n.includes('allowlist') || n.includes('profile')) return 'platform';
+    return 'other';
+  }
+
   async function refresh() {
     const status = $('status');
     status.hidden = false;
     status.textContent = 'Loading…';
     try {
-      // Prefer REST helper on HTTP transport
       const base = $('base').value.replace(/\/+$/, '');
+      const domain = $('domain').value;
       let pending = [];
       try {
-        const r = await fetch(base + '/approvals');
-        if (r.ok) {
-          const j = await r.json();
-          pending = j.pending || [];
-        } else {
-          const j = await callTool('hcm_list_pending_approvals', {});
-          pending = j.pending || j.items || [];
-        }
+        const j = await callTool('hcm_list_pending_approvals_by_domain', domain ? { domain } : {});
+        pending = j.pending || [];
       } catch {
-        const j = await callTool('hcm_list_pending_approvals', {});
-        pending = j.pending || j.items || [];
+        try {
+          const r = await fetch(base + '/approvals');
+          if (r.ok) {
+            const j = await r.json();
+            pending = (j.pending || []).map((p) => ({
+              ...p,
+              domain: domainOf(p.tool || p.toolName),
+            }));
+            if (domain) pending = pending.filter((p) => p.domain === domain);
+          } else {
+            const j = await callTool('hcm_list_pending_approvals', {});
+            pending = (j.pending || j.items || []).map((p) => ({
+              ...p,
+              domain: domainOf(p.tool || p.toolName),
+            }));
+            if (domain) pending = pending.filter((p) => p.domain === domain);
+          }
+        } catch {
+          const j = await callTool('hcm_list_pending_approvals', {});
+          pending = (j.pending || j.items || []).map((p) => ({
+            ...p,
+            domain: domainOf(p.tool || p.toolName),
+          }));
+          if (domain) pending = pending.filter((p) => p.domain === domain);
+        }
       }
-      status.textContent = JSON.stringify({ count: pending.length }, null, 2);
+      lastPending = pending;
+      status.textContent = JSON.stringify({ count: pending.length, domain: domain || 'all' }, null, 2);
       const ul = $('list');
       ul.innerHTML = '';
       if (!pending.length) {
@@ -51,7 +86,9 @@
         li.innerHTML =
           '<div><strong>' +
           (p.tool || p.toolName || '?') +
-          '</strong></div>' +
+          '</strong> <span class="meta">[' +
+          (p.domain || domainOf(p.tool || p.toolName)) +
+          ']</span></div>' +
           '<div class="meta">' +
           (p.summary || '') +
           '</div>' +
@@ -95,5 +132,37 @@
   }
 
   $('refresh').addEventListener('click', refresh);
+  $('domain').addEventListener('change', refresh);
+  $('bulkApprove').addEventListener('click', async () => {
+    const ids = lastPending.map((p) => p.approval_id || p.approvalId).filter(Boolean);
+    if (!ids.length) {
+      $('status').textContent = 'Nothing to approve';
+      return;
+    }
+    $('status').hidden = false;
+    $('status').textContent = 'Bulk approving ' + ids.length + '…';
+    try {
+      const r = await callTool('hcm_bulk_approve_writes', { approvalIds: ids });
+      $('status').textContent = JSON.stringify(r, null, 2);
+      await refresh();
+    } catch (e) {
+      $('status').textContent = String(e);
+    }
+  });
+  $('exportAudit').addEventListener('click', async () => {
+    try {
+      const r = await callTool('hcm_export_approval_audit', { limit: 200 });
+      const blob = new Blob([JSON.stringify(r, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'hcm-approval-audit-' + Date.now() + '.json';
+      a.click();
+      $('status').hidden = false;
+      $('status').textContent = 'Exported audit JSON (' + (r.audit?.length || 0) + ' events)';
+    } catch (e) {
+      $('status').hidden = false;
+      $('status').textContent = String(e);
+    }
+  });
   refresh();
 })();

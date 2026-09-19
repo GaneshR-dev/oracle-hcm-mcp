@@ -102,6 +102,11 @@ export class WebhookReceiver {
   private tlsCertPath?: string;
   private tlsCaPath?: string;
   private boundPort?: number;
+  /** Replay protection: seen nonce → expiry ms */
+  private seenNonces = new Map<string, number>();
+  /** Max age for X-HCM-Timestamp (default 5 min) */
+  private replayWindowMs: number;
+  private replayProtection: boolean;
 
   constructor(opts: WebhookReceiverOptions = {}) {
     this.secrets = resolveSecrets(opts);
@@ -113,6 +118,49 @@ export class WebhookReceiver {
     this.tlsKeyPath = opts.tlsKeyPath ?? process.env.ORACLE_HCM_WEBHOOK_TLS_KEY;
     this.tlsCertPath = opts.tlsCertPath ?? process.env.ORACLE_HCM_WEBHOOK_TLS_CERT;
     this.tlsCaPath = opts.tlsCaPath ?? process.env.ORACLE_HCM_WEBHOOK_TLS_CA;
+    this.replayWindowMs = Number(process.env.ORACLE_HCM_WEBHOOK_REPLAY_WINDOW_MS ?? 5 * 60 * 1000);
+    this.replayProtection =
+      process.env.ORACLE_HCM_WEBHOOK_REPLAY_PROTECTION !== '0' &&
+      process.env.ORACLE_HCM_WEBHOOK_REPLAY_PROTECTION !== 'false';
+  }
+
+  /** Check timestamp + nonce replay; returns error message or null if ok. */
+  checkReplay(headers: http.IncomingHttpHeaders): string | null {
+    if (!this.replayProtection) return null;
+    const tsRaw = headers['x-hcm-timestamp'] ?? headers['x-timestamp'];
+    const nonceRaw = headers['x-hcm-nonce'] ?? headers['x-nonce'];
+    const ts = Array.isArray(tsRaw) ? tsRaw[0] : tsRaw;
+    const nonce = Array.isArray(nonceRaw) ? nonceRaw[0] : nonceRaw;
+    // If neither present, allow (compat) unless require both via env
+    const requireBoth = process.env.ORACLE_HCM_WEBHOOK_REQUIRE_REPLAY_HEADERS === '1';
+    if (!ts && !nonce) {
+      return requireBoth ? 'Missing X-HCM-Timestamp and X-HCM-Nonce' : null;
+    }
+    if (ts) {
+      const t = Date.parse(ts) || Number(ts);
+      if (!Number.isFinite(t)) return 'Invalid X-HCM-Timestamp';
+      const age = Math.abs(Date.now() - t);
+      if (age > this.replayWindowMs) {
+        return `Timestamp outside replay window (${this.replayWindowMs}ms)`;
+      }
+    }
+    if (nonce) {
+      this.purgeNonces();
+      if (this.seenNonces.has(nonce)) return 'Replay detected: nonce already used';
+      this.seenNonces.set(nonce, Date.now() + this.replayWindowMs);
+    }
+    return null;
+  }
+
+  private purgeNonces(): void {
+    const now = Date.now();
+    for (const [k, exp] of this.seenNonces) {
+      if (exp < now) this.seenNonces.delete(k);
+    }
+  }
+
+  get replayProtectionEnabled(): boolean {
+    return this.replayProtection;
   }
 
   get signingEnabled(): boolean {
@@ -168,7 +216,9 @@ export class WebhookReceiver {
             rotatingSecrets: this.secrets.length,
             mtlsEnabled: this.mtls,
             signatureHeader: 'X-HCM-Signature: sha256=<hmac-hex>',
-            note: 'Unofficial webhook stub — HMAC + optional rotating secrets / mTLS.',
+            replayProtection: this.replayProtection,
+            replayHeaders: ['X-HCM-Timestamp', 'X-HCM-Nonce'],
+            note: 'Unofficial webhook stub — HMAC + rotating secrets / mTLS + replay protection.',
           }),
         );
         return;
@@ -194,6 +244,19 @@ export class WebhookReceiver {
               );
               return;
             }
+          }
+
+          const replayErr = this.checkReplay(req.headers);
+          if (replayErr) {
+            res.writeHead(409, { 'Content-Type': 'application/json' });
+            res.end(
+              JSON.stringify({
+                accepted: false,
+                error: replayErr,
+                hint: 'Send unique X-HCM-Nonce and fresh X-HCM-Timestamp within replay window',
+              }),
+            );
+            return;
           }
 
           let body: unknown = raw;

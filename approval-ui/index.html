@@ -10,12 +10,30 @@
   <main class="wrap">
     <header>
       <h1>Pending HCM write approvals</h1>
-      <p class="sub">Unofficial · localhost only · not an Oracle product</p>
+      <p class="sub">Unofficial · localhost only · not an Oracle product · v0.6</p>
     </header>
-    <aside class="disclaimer">Approve / deny only mutations you understand. Credentials and Fusion RBAC still apply.</aside>
+    <aside class="disclaimer">Approve / deny only mutations you understand. Credentials and Fusion RBAC still apply. Under <code>--write</code> this queue is unused.</aside>
     <div class="row">
       <label>MCP HTTP base <input id="base" value="http://127.0.0.1:8788" /></label>
+      <label>Domain
+        <select id="domain">
+          <option value="">All domains</option>
+          <option>absence</option>
+          <option>worker</option>
+          <option>learning</option>
+          <option>compensation</option>
+          <option>documents</option>
+          <option>journeys</option>
+          <option>performance</option>
+          <option>benefits</option>
+          <option>recruiting</option>
+          <option>platform</option>
+          <option>other</option>
+        </select>
+      </label>
       <button id="refresh" class="btn primary" type="button">Refresh</button>
+      <button id="bulkApprove" class="btn" type="button">Bulk approve visible</button>
+      <button id="exportAudit" class="btn" type="button">Export audit</button>
     </div>
     <pre id="status" class="result" hidden></pre>
     <ul id="list" class="list"></ul>

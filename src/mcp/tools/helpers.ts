@@ -88,8 +88,17 @@ export function recordAudit(
 }
 
 /**
- * Gate write tools. Sensitive tools always need approval unless
- * ORACLE_HCM_SENSITIVE=1 and ORACLE_HCM_SENSITIVE_WRITE=1 with --write.
+ * Gate write tools.
+ *
+ * **`--write` / ORACLE_HCM_WRITE=1 bypasses everything**: no approval queue,
+ * no SENSITIVE gate, mutations run immediately (including payslip/bank/comp).
+ *
+ * Default (approval) mode:
+ * - Sensitive tools need ORACLE_HCM_SENSITIVE=1, then queue for approval.
+ * - Other writes queue for approval.
+ *
+ * ORACLE_HCM_SENSITIVE_WRITE is retained for docs/compat but is unused when
+ * writeMode is already on (writeMode alone is sufficient).
  */
 export async function gateWrite(
   ctx: ToolContext,
@@ -100,36 +109,42 @@ export async function gateWrite(
     const exec = ctx.executors.get(toolName);
     if (!exec) throw new Error(`No executor for ${toolName}`);
 
+    // --write / ORACLE_HCM_WRITE=1: bypass approval + sensitive gates entirely
+    if (ctx.writeMode) {
+      const result = await exec(args);
+      audit(
+        ctx,
+        toolName,
+        isSensitiveTool(toolName) ? 'sensitive' : 'write',
+        summarizeMutation(toolName, args),
+      );
+      return jsonResult(result);
+    }
+
     if (isSensitiveTool(toolName)) {
       if (!ctx.config.sensitiveEnabled) {
         return errorResult(
           new Error(
-            `${toolName} is gated. Set ORACLE_HCM_SENSITIVE=1 to enable payslip/bank/national-ID style tools.`,
+            `${toolName} is gated. Set ORACLE_HCM_SENSITIVE=1 to enable payslip/bank/national-ID style tools in default (approval) mode. Or use --write / ORACLE_HCM_WRITE=1 to bypass.`,
           ),
         );
       }
-      const allowImmediate = ctx.writeMode && ctx.config.sensitiveWriteEnabled;
-      if (!allowImmediate) {
-        const summary = summarizeMutation(toolName, args);
-        const intent = ctx.approvals.create(toolName, args, summary);
-        audit(ctx, toolName, 'sensitive', `pending:${intent.approvalId}`);
-        return jsonResult({
-          pending_approval: true,
-          sensitive: true,
-          approval_id: intent.approvalId,
-          tool: toolName,
-          summary: intent.summary,
-          expires_at: new Date(intent.expiresAt).toISOString(),
-          message:
-            'Sensitive tool requires approval even in --write unless ORACLE_HCM_SENSITIVE_WRITE=1. Use hcm_approve_write.',
-        });
-      }
-      const result = await exec(args);
-      audit(ctx, toolName, 'sensitive', summarizeMutation(toolName, args));
-      return jsonResult(result);
+      const summary = summarizeMutation(toolName, args);
+      const intent = ctx.approvals.create(toolName, args, summary);
+      audit(ctx, toolName, 'sensitive', `pending:${intent.approvalId}`);
+      return jsonResult({
+        pending_approval: true,
+        sensitive: true,
+        approval_id: intent.approvalId,
+        tool: toolName,
+        summary: intent.summary,
+        expires_at: new Date(intent.expiresAt).toISOString(),
+        message:
+          'Sensitive tool requires approval in default mode. Use hcm_approve_write, or restart with --write / ORACLE_HCM_WRITE=1 to bypass all gates.',
+      });
     }
 
-    if (!isWriteTool(toolName) || ctx.writeMode) {
+    if (!isWriteTool(toolName)) {
       const result = await exec(args);
       audit(ctx, toolName, 'write', summarizeMutation(toolName, args));
       return jsonResult(result);
@@ -145,7 +160,7 @@ export async function gateWrite(
       summary: intent.summary,
       expires_at: new Date(intent.expiresAt).toISOString(),
       message:
-        'Write requires human approval. Call hcm_approve_write with approval_id, or hcm_deny_write to cancel.',
+        'Write requires human approval. Call hcm_approve_write with approval_id, or hcm_deny_write to cancel. Or use --write / ORACLE_HCM_WRITE=1 to bypass.',
     });
   } catch (err) {
     return errorResult(err);

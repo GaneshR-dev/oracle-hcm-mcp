@@ -66,7 +66,7 @@ const DEFAULT_PROFILES: EnvProfile[] = [
     authMode: 'oauth',
     writeMode: false,
     sensitiveEnabled: false,
-    note: 'Production — read-first; approval-by-default; least privilege.',
+    note: 'Production — read-first; approval-by-default; --write still bypasses (no prod write lock).',
   },
 ];
 
@@ -127,12 +127,14 @@ export function setActiveProfile(name: string, filePath?: string): ProfileStore 
 
 /** Apply a named profile onto a Config (secrets resolved from env var names). */
 export function applyProfileToConfig(cfg: Config, profile: EnvProfile): Config {
+  // --write / ORACLE_HCM_WRITE=1 always wins: profile cannot lock writes off.
+  // Profile may enable writeMode, but never disables an already-set writeMode.
   const next: Config = {
     ...cfg,
     baseUrl: profile.baseUrl.replace(/\/+$/, ''),
     apiVersion: profile.apiVersion ?? cfg.apiVersion,
     authMode: profile.authMode ?? cfg.authMode,
-    writeMode: profile.writeMode ?? cfg.writeMode,
+    writeMode: Boolean(cfg.writeMode) || Boolean(profile.writeMode),
     sensitiveEnabled: profile.sensitiveEnabled ?? cfg.sensitiveEnabled,
     profile: profile.name,
   };

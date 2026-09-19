@@ -1,6 +1,6 @@
-# Tools (v0.5)
+# Tools (v0.6)
 
-Unofficial MCP tool catalog. Not an Oracle product. 140+ tools (v0.5).
+Unofficial MCP tool catalog. Not an Oracle product. 190+ tools (v0.6).
 
 ## Meta / setup
 
@@ -73,7 +73,7 @@ Organizations, locations, jobs, grades search/get;
 ## Approval
 
 `hcm_list_pending_approvals`, `hcm_approve_write`, `hcm_deny_write`
-(always registered; sensitive tools use them even under `--write`)
+(always registered; under `--write` approvals are unused — mutations run immediately including sensitive)
 
 
 ## v0.5 additions
@@ -97,3 +97,29 @@ Organizations, locations, jobs, grades search/get;
 **Learning / goals writes:** `hcm_create_goal`, `hcm_update_goal`, `hcm_enroll_learning`, `hcm_update_learning_enrollment`
 
 **Compensation / absence LOVs:** `hcm_update_compensation` (SENSITIVE), `hcm_get_absence_type`, `hcm_get_absence_plan`, `hcm_balance_by_plan`
+
+## v0.6 additions
+
+**Performance:** `hcm_search_review_cycles`, `hcm_get_review_cycle`, `hcm_search_feedback`, `hcm_get_feedback`, `hcm_create_feedback`, `hcm_search_check_ins`, `hcm_get_check_in`, `hcm_create_check_in`
+
+**Learning depth:** `hcm_search_learning_assignments`, `hcm_get_learning_assignment`, `hcm_list_learning_completions`, `hcm_record_learning_completion`
+
+**Compensation packs (SENSITIVE in default only):** `hcm_search_salary_bases`, `hcm_get_salary_basis`, `hcm_search_grade_steps`, `hcm_get_grade_step`, `hcm_get_offer_letter_fields`
+
+**Workforce structures:** `hcm_search_departments`, `hcm_get_department_tree`, `hcm_search_job_families`, `hcm_get_job_family`, `hcm_list_position_hierarchy`
+
+**Document records:** `hcm_search_document_records`, `hcm_get_document_record`, `hcm_upload_document_record`, `hcm_redact_document_pii`
+
+**Journeys:** `hcm_search_journeys`, `hcm_get_journey`, `hcm_list_journey_tasks`, `hcm_update_journey_task`
+
+**Absence enhancements:** `hcm_preview_entitlement_calc`, `hcm_accrual_balances_by_date`, `hcm_list_absence_type_lov`, `hcm_list_absence_plan_lov`
+
+**Recipes:** `hcm_recipe_transfer`, `hcm_recipe_terminate`, `hcm_recipe_promote`, `hcm_recipe_new_contingent_worker`, `hcm_recipe_mass_absence_approve`
+
+**Agent UX:** `hcm_preview_write`, `hcm_list_field_maps`, `hcm_field_map`, `hcm_role_privilege_probe`
+
+**Platform:** `hcm_atom_cdc_status`, `hcm_refresh_allowlist_from_openapi`, `hcm_export_approval_audit`, `hcm_bulk_approve_writes`, `hcm_list_pending_approvals_by_domain`
+
+**Nice/later:** `hcm_otbi_query`, `hcm_search_benefit_dependents`, `hcm_search_life_events`, `hcm_search_payroll_costing`, `hcm_get_element_entry`, `hcm_create_element_entry`, `hcm_update_element_entry`, `hcm_search_talent_pools`, `hcm_get_talent_pool`
+
+> **Safety (v0.6):** `--write` / `ORACLE_HCM_WRITE=1` bypasses approval **and** SENSITIVE gates. SENSITIVE only applies in default mode.

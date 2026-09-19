@@ -504,6 +504,34 @@ export function createDummyApp(store?: Store): express.Express {
   crud('recruitingCandidateAttachments', s.candidateAttachments as unknown as Record<string, unknown>[], 'AttachmentId');
   crud('workerLegislativeData', s.legislativeData as unknown as Record<string, unknown>[], 'LegislativeDataId');
   crud('assignmentHistories', s.assignmentHistories as unknown as Record<string, unknown>[], 'HistoryId');
+  crud('reviewCycles', s.reviewCycles as unknown as Record<string, unknown>[], 'ReviewCycleId');
+  crud('performanceFeedback', s.feedbackItems as unknown as Record<string, unknown>[], 'FeedbackId');
+  crud('checkIns', s.checkIns as unknown as Record<string, unknown>[], 'CheckInId');
+  crud('learningAssignments', s.learningAssignments as unknown as Record<string, unknown>[], 'AssignmentId');
+  crud('learningCompletions', s.learningCompletions as unknown as Record<string, unknown>[], 'CompletionId');
+  crud('salaryBases', s.salaryBases as unknown as Record<string, unknown>[], 'SalaryBasisId');
+  crud('gradeSteps', s.gradeSteps as unknown as Record<string, unknown>[], 'GradeStepId');
+  crud('jobFamilies', s.jobFamilies as unknown as Record<string, unknown>[], 'JobFamilyId');
+  crud('documentRecords', s.documentRecords as unknown as Record<string, unknown>[], 'DocumentRecordId');
+  crud('workerJourneys', s.workerJourneys as unknown as Record<string, unknown>[], 'JourneyId');
+  crud('journeyTasks', s.journeyTasks as unknown as Record<string, unknown>[], 'JourneyTaskId');
+  crud('benefitDependents', s.benefitDependents as unknown as Record<string, unknown>[], 'DependentId');
+  crud('lifeEvents', s.lifeEvents as unknown as Record<string, unknown>[], 'LifeEventId');
+  crud('talentPools', s.talentPools as unknown as Record<string, unknown>[], 'TalentPoolId');
+  crud('payrollCosting', s.payrollCosting as unknown as Record<string, unknown>[], 'CostingId');
+  // departments alias of organizations filtered
+  app.get(`${API}/departments`, (req, res) => {
+    const items = s.organizations.filter((o) => o.ClassificationCode === 'DEPT' || !o.ClassificationCode);
+    res.json(collection(matchQ(items as unknown as Record<string, unknown>[], req.query.q as string)));
+  });
+  app.get(`${API}/departments/:id`, (req, res) => {
+    const o = s.organizations.find((x) => x.OrganizationId === req.params.id);
+    if (!o) return res.status(404).json({ error: 'Not found' });
+    res.json(o);
+  });
+  app.get(`${API}/otbiReports`, (_req, res) => {
+    res.json(collection([{ ReportId: 'OTBI1', ReportName: 'Headcount Summary', Path: '/shared/HCM/Headcount' }]));
+  });
   crud('benefitEnrollments', s.benefitEnrollments as unknown as Record<string, unknown>[], 'EnrollmentId');
   crud('positions', s.positions as unknown as Record<string, unknown>[], 'PositionId');
   crud('hcmContacts', s.contacts as unknown as Record<string, unknown>[], 'ContactId');
@@ -716,6 +744,114 @@ export function createDummyApp(store?: Store): express.Express {
     Object.assign(row, req.body);
     res.json(row);
   });
+
+
+  // v0.6 writes: feedback, check-ins, document upload, journey tasks, learning completion
+  app.post(`${API}/performanceFeedback`, (req, res) => {
+    const id = s.nextId('FB');
+    const row = {
+      FeedbackId: id,
+      PersonNumber: req.body?.PersonNumber ?? 'P1001',
+      FromPersonNumber: req.body?.FromPersonNumber ?? 'P1002',
+      Comments: req.body?.Comments ?? '',
+      Status: req.body?.Status ?? 'SUBMITTED',
+    };
+    s.feedbackItems.push(row);
+    res.status(201).json(row);
+  });
+  app.post(`${API}/checkIns`, (req, res) => {
+    const id = s.nextId('CI');
+    const row = {
+      CheckInId: id,
+      PersonNumber: req.body?.PersonNumber ?? 'P1002',
+      ManagerPersonNumber: req.body?.ManagerPersonNumber ?? 'P1001',
+      ScheduledDate: req.body?.ScheduledDate ?? '2026-10-01',
+      Status: req.body?.Status ?? 'SCHEDULED',
+      Notes: req.body?.Notes,
+    };
+    s.checkIns.push(row);
+    res.status(201).json(row);
+  });
+  app.post(`${API}/documentRecords`, (req, res) => {
+    const id = s.nextId('DR');
+    const row = {
+      DocumentRecordId: id,
+      PersonNumber: req.body?.PersonNumber ?? 'P1001',
+      DocumentType: req.body?.DocumentType ?? 'OTHER',
+      FileName: req.body?.FileName ?? 'upload.bin',
+      UploadedAt: new Date().toISOString(),
+      Status: 'ACTIVE',
+    };
+    s.documentRecords.push(row);
+    res.status(201).json(row);
+  });
+  app.patch(`${API}/journeyTasks/:id`, (req, res) => {
+    const row = s.journeyTasks.find((x) => x.JourneyTaskId === req.params.id);
+    if (!row) return res.status(404).json({ error: 'Not found' });
+    Object.assign(row, req.body);
+    res.json(row);
+  });
+  app.post(`${API}/learningCompletions`, (req, res) => {
+    const id = s.nextId('LC');
+    const row = {
+      CompletionId: id,
+      PersonNumber: req.body?.PersonNumber ?? 'P1001',
+      CourseName: req.body?.CourseName ?? 'Course',
+      CompletionDate: req.body?.CompletionDate ?? new Date().toISOString().slice(0, 10),
+      Score: req.body?.Score,
+    };
+    s.learningCompletions.push(row);
+    res.status(201).json(row);
+  });
+  app.post(`${API}/elementEntries`, (req, res) => {
+    const id = s.nextId('EE');
+    const row = {
+      ElementEntryId: id,
+      PersonNumber: req.body?.PersonNumber ?? 'P1001',
+      ElementName: req.body?.ElementName ?? 'Element',
+      Amount: Number(req.body?.Amount ?? 0),
+      ElementType: req.body?.ElementType ?? 'Earnings',
+      EffectiveStartDate: req.body?.EffectiveStartDate,
+      InputValue: req.body?.InputValue,
+    };
+    s.elementEntries.push(row);
+    res.status(201).json(row);
+  });
+  app.patch(`${API}/elementEntries/:id`, (req, res) => {
+    const row = s.elementEntries.find((x) => x.ElementEntryId === req.params.id);
+    if (!row) return res.status(404).json({ error: 'Not found' });
+    Object.assign(row, req.body);
+    res.json(row);
+  });
+  // Absence entitlement preview
+  app.post(`${API}/absences/action/previewEntitlement`, (req, res) => {
+    const person = req.body?.PersonNumber ?? req.body?.personNumber ?? 'P1001';
+    const type = req.body?.absenceType ?? req.body?.AbsenceType ?? 'Vacation';
+    const start = req.body?.startDate ?? req.body?.StartDate ?? '2026-10-01';
+    const end = req.body?.endDate ?? req.body?.EndDate ?? '2026-10-03';
+    const days = Math.max(1, Math.round((Date.parse(end) - Date.parse(start)) / 86400000) + 1);
+    const bal = s.balances.find((b) => b.personNumber === person);
+    res.json({
+      preview: true,
+      PersonNumber: person,
+      absenceType: type,
+      startDate: start,
+      endDate: end,
+      requestedDays: days,
+      availableBalance: bal?.balance ?? 0,
+      sufficient: (bal?.balance ?? 0) >= days,
+      unofficial: true,
+    });
+  });
+  // Accrual balances by date
+  app.get(`${API}/planBalances/action/byDate`, (req, res) => {
+    const asOf = String(req.query.asOf ?? req.query.date ?? '2026-09-19');
+    const person = req.query.personNumber as string | undefined;
+    let items = s.balances.map((b) => ({ ...b, asOfDate: asOf, accruedToDate: b.balance }));
+    if (person) items = items.filter((b) => b.personNumber === person);
+    res.json(collection(items));
+  });
+
 
   // Blocklist demo
   app.all(`${API}/ce/*path`, (_req, res) => {

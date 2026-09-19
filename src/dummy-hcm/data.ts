@@ -245,6 +245,23 @@ export type AtomEntry = {
   links?: { rel: string; href: string }[];
 };
 
+
+export type ReviewCycle = { ReviewCycleId: string; CycleName: string; Status: string; StartDate: string; EndDate: string };
+export type Feedback = { FeedbackId: string; PersonNumber: string; FromPersonNumber: string; Comments: string; Status: string };
+export type CheckIn = { CheckInId: string; PersonNumber: string; ManagerPersonNumber: string; ScheduledDate: string; Status: string; Notes?: string };
+export type LearningAssignment = { AssignmentId: string; PersonNumber: string; CourseName: string; DueDate: string; Status: string };
+export type LearningCompletion = { CompletionId: string; PersonNumber: string; CourseName: string; CompletionDate: string; Score?: number };
+export type SalaryBasis = { SalaryBasisId: string; Name: string; Frequency: string; Currency: string; Status: string };
+export type GradeStep = { GradeStepId: string; GradeId: string; StepName: string; Sequence: number; Amount: number };
+export type JobFamily = { JobFamilyId: string; JobFamilyCode: string; JobFamilyName: string; Status: string };
+export type DocumentRecord = { DocumentRecordId: string; PersonNumber: string; DocumentType: string; FileName: string; UploadedAt: string; Status: string };
+export type WorkerJourney = { JourneyId: string; PersonNumber: string; JourneyName: string; Status: string; JourneyType: string };
+export type JourneyTask = { JourneyTaskId: string; JourneyId: string; TaskName: string; Status: string; DueDate?: string };
+export type BenefitDependent = { DependentId: string; PersonNumber: string; DependentName: string; Relationship: string; BirthDate?: string };
+export type LifeEvent = { LifeEventId: string; PersonNumber: string; EventType: string; EventDate: string; Status: string };
+export type TalentPool = { TalentPoolId: string; PoolName: string; Status: string; MemberCount: number };
+export type PayrollCosting = { CostingId: string; PersonNumber: string; CostCenter: string; Percentage: number; ElementName?: string };
+
 export type PayrollRelationship = {
   PayrollRelationshipId: string;
   PersonNumber: string;
@@ -649,6 +666,57 @@ export function seedStore() {
     { HistoryId: 'AH1', WorkerId: '1001', AssignmentId: 'AS1', EffectiveStartDate: '2024-01-15', ActionCode: 'HIRE', JobId: 'J1' },
     { HistoryId: 'AH2', WorkerId: '1001', AssignmentId: 'AS1', EffectiveStartDate: '2025-06-01', ActionCode: 'PROMOTION', JobId: 'J1' },
   ];
+
+  const reviewCycles: ReviewCycle[] = [
+    { ReviewCycleId: 'RC1', CycleName: '2026 Annual', Status: 'OPEN', StartDate: '2026-01-01', EndDate: '2026-12-31' },
+  ];
+  const feedbackItems: Feedback[] = [
+    { FeedbackId: 'FB1', PersonNumber: 'P1001', FromPersonNumber: 'P1002', Comments: 'Great collaborator', Status: 'SUBMITTED' },
+  ];
+  const checkIns: CheckIn[] = [
+    { CheckInId: 'CI1', PersonNumber: 'P1002', ManagerPersonNumber: 'P1001', ScheduledDate: '2026-09-25', Status: 'SCHEDULED', Notes: 'Career chat' },
+  ];
+  const learningAssignments: LearningAssignment[] = [
+    { AssignmentId: 'LA1', PersonNumber: 'P1002', CourseName: 'Fusion HCM Basics', DueDate: '2026-10-01', Status: 'ASSIGNED' },
+  ];
+  const learningCompletions: LearningCompletion[] = [
+    { CompletionId: 'LC1', PersonNumber: 'P1001', CourseName: 'Security Awareness', CompletionDate: '2026-08-15', Score: 95 },
+  ];
+  const salaryBases: SalaryBasis[] = [
+    { SalaryBasisId: 'SB1', Name: 'US Monthly', Frequency: 'MONTHLY', Currency: 'USD', Status: 'A' },
+    { SalaryBasisId: 'SB2', Name: 'US Annual', Frequency: 'ANNUAL', Currency: 'USD', Status: 'A' },
+  ];
+  const gradeSteps: GradeStep[] = [
+    { GradeStepId: 'GS1', GradeId: 'G1', StepName: 'Step 1', Sequence: 1, Amount: 90000 },
+    { GradeStepId: 'GS2', GradeId: 'G1', StepName: 'Step 2', Sequence: 2, Amount: 100000 },
+  ];
+  const jobFamilies: JobFamily[] = [
+    { JobFamilyId: 'JF1', JobFamilyCode: 'ENG', JobFamilyName: 'Engineering', Status: 'A' },
+    { JobFamilyId: 'JF2', JobFamilyCode: 'PROD', JobFamilyName: 'Product', Status: 'A' },
+  ];
+  const documentRecords: DocumentRecord[] = [
+    { DocumentRecordId: 'DR1', PersonNumber: 'P1001', DocumentType: 'I9', FileName: 'i9.pdf', UploadedAt: '2026-01-10T10:00:00Z', Status: 'ACTIVE' },
+  ];
+  const workerJourneys: WorkerJourney[] = [
+    { JourneyId: 'JN1', PersonNumber: 'P1002', JourneyName: 'New Hire Onboarding', Status: 'IN_PROGRESS', JourneyType: 'ONBOARDING' },
+  ];
+  const journeyTasks: JourneyTask[] = [
+    { JourneyTaskId: 'JT1', JourneyId: 'JN1', TaskName: 'Complete profile', Status: 'COMPLETE', DueDate: '2026-09-01' },
+    { JourneyTaskId: 'JT2', JourneyId: 'JN1', TaskName: 'Benefits enrollment', Status: 'PENDING', DueDate: '2026-09-30' },
+  ];
+  const benefitDependents: BenefitDependent[] = [
+    { DependentId: 'BD1', PersonNumber: 'P1001', DependentName: 'Charles Babbage', Relationship: 'Spouse', BirthDate: '1985-03-01' },
+  ];
+  const lifeEvents: LifeEvent[] = [
+    { LifeEventId: 'LE1', PersonNumber: 'P1001', EventType: 'MARRIAGE', EventDate: '2026-06-01', Status: 'PROCESSED' },
+  ];
+  const talentPools: TalentPool[] = [
+    { TalentPoolId: 'TPOL1', PoolName: 'High Potential IC', Status: 'A', MemberCount: 2 },
+  ];
+  const payrollCosting: PayrollCosting[] = [
+    { CostingId: 'PC1', PersonNumber: 'P1001', CostCenter: 'CC-ENG', Percentage: 100, ElementName: 'Regular Salary' },
+  ];
+
   return {
     workers,
     workerAssignments,
@@ -691,6 +759,21 @@ export function seedStore() {
     candidateAttachments,
     legislativeData,
     assignmentHistories,
+    reviewCycles,
+    feedbackItems,
+    checkIns,
+    learningAssignments,
+    learningCompletions,
+    salaryBases,
+    gradeSteps,
+    jobFamilies,
+    documentRecords,
+    workerJourneys,
+    journeyTasks,
+    benefitDependents,
+    lifeEvents,
+    talentPools,
+    payrollCosting,
     nextId,
   };
 }

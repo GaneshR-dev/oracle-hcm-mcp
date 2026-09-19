@@ -28,7 +28,7 @@ export async function startHttp(cfg: Config, port: number): Promise<HttpTranspor
           service: 'oracle-hcm-mcp',
           unofficial: true,
           writeMode: cfg.writeMode,
-          version: '0.5.0',
+          version: '0.6.0',
         }),
       );
       return;

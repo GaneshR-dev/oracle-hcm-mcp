@@ -13,7 +13,7 @@ export interface Config {
   writeMode: boolean;
   /** Enable payslip / bank / national-ID tools (ORACLE_HCM_SENSITIVE=1) */
   sensitiveEnabled: boolean;
-  /** Allow sensitive tools to skip approval when combined with --write */
+  /** Deprecated/compat: --write alone bypasses sensitive gates. Kept for publicConfigView. */
   sensitiveWriteEnabled: boolean;
   authMode: AuthMode;
   username?: string;
@@ -130,7 +130,7 @@ MIT License. Use at your own risk.
 
 Usage:
   oracle-hcm-mcp                     # stdio, approval required for writes
-  oracle-hcm-mcp --write             # stdio, unrestricted writes
+  oracle-hcm-mcp --write             # stdio, unrestricted writes (bypasses approval + SENSITIVE + prod lock)
   oracle-hcm-mcp --http 8788
   oracle-hcm-mcp --grpc 8789
   oracle-hcm-mcp --webhook 8795

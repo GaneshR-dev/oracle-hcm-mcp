@@ -193,8 +193,9 @@ describe('v0.5 learning/goals writes + compensation + absence LOVs', () => {
     });
   });
 
-  it('compensation update is sensitive-gated', async () => {
-    await withClient(cfg({ writeMode: true }), async (c) => {
+  it('compensation update is sensitive-gated only in default mode; --write bypasses', async () => {
+    // default without SENSITIVE → error
+    await withClient(cfg({ writeMode: false, sensitiveEnabled: false }), async (c) => {
       const raw = await c.callTool({
         name: 'hcm_update_compensation',
         arguments: { compensationId: 'CH1', body: { Amount: 11000 } },
@@ -203,7 +204,8 @@ describe('v0.5 learning/goals writes + compensation + absence LOVs', () => {
       const body = parse(raw as { content: { type: string; text?: string }[] });
       expect(String(body.error)).toMatch(/ORACLE_HCM_SENSITIVE/);
     });
-    await withClient(cfg({ writeMode: true, sensitiveEnabled: true }), async (c) => {
+    // default with SENSITIVE → approval queue
+    await withClient(cfg({ writeMode: false, sensitiveEnabled: true }), async (c) => {
       const r = parse(
         await c.callTool({
           name: 'hcm_update_compensation',
@@ -211,6 +213,17 @@ describe('v0.5 learning/goals writes + compensation + absence LOVs', () => {
         }),
       );
       expect(r.pending_approval || r.sensitive).toBeTruthy();
+    });
+    // --write bypasses SENSITIVE entirely
+    await withClient(cfg({ writeMode: true, sensitiveEnabled: false }), async (c) => {
+      const r = parse(
+        await c.callTool({
+          name: 'hcm_update_compensation',
+          arguments: { compensationId: 'CH1', body: { Amount: 11111 } },
+        }),
+      );
+      expect(r.pending_approval).toBeUndefined();
+      expect(r.Amount ?? r.CompensationId).toBeTruthy();
     });
   });
 

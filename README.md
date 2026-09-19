@@ -10,15 +10,13 @@ Unofficial Model Context Protocol (MCP) server for **Oracle Fusion Cloud HCM** R
 
 ## Status
 
-v0.5 — smoke probe profiles, OAuth/setup polish, person deep-read, recruiting offers/interviews/attachments,
-time validate→submit, benefits enroll/opt-out, recipes, redaction audit, multi-env switcher, Atom replay + real-pod hooks,
-webhook rotating secrets/mTLS, approval UI, OpenAPI allowlist codegen, batch GET / pool / 429 tuning,
-learning/goals writes, compensation update (sensitive), absence LOV helpers. **140+ tools**.
+v0.6 — performance (cycles/feedback/check-ins), learning depth, compensation LOVs + offer letter fields,
+workforce structures, document records, journeys, absence entitlement/accrual LOVs, HR recipes
+(transfer/terminate/promote/contingent/mass-approve), dry-run preview, field maps, role/privilege probe,
+Atom CDC status, webhook replay protection, approval UI domain/bulk/export, OpenAPI allowlist refresh,
+multi-tenant profiles (`--write` always wins), OTBI thin read, benefits dependents/life events,
+payroll costing/element entries (SENSITIVE in default only), talent pools. **190+ tools**.
 Perfect ADF coverage is **not** a goal. See [docs/ROADMAP.md](docs/ROADMAP.md).
-
-curated ADF finders (`hcm_lov_find` / `hcm_describe_finder`), richer payslip fields, heavier HTTP/gRPC e2e.
-Builds on v0.3 curated domains. **140+ tools**. Perfect ADF coverage is **not** a goal.
-See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ### Honest coverage
 
@@ -40,8 +38,8 @@ See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 | Mode | Behavior |
 |------|----------|
-| **Default** | Mutating tools return `pending_approval` with an `approval_id`. A human (or trusted client) must call `hcm_approve_write` or `hcm_deny_write`. Approval tools are registered. |
-| **`--write`** / `ORACLE_HCM_WRITE=1` | Mutations run **immediately**. Approval tools remain registered so **sensitive** tools can still require approval unless `ORACLE_HCM_SENSITIVE_WRITE=1`. Use only for trusted automation against non-production or carefully controlled environments. |
+| **Default** | Mutating tools return `pending_approval` with an `approval_id`. A human (or trusted client) must call `hcm_approve_write` or `hcm_deny_write`. **SENSITIVE** tools also need `ORACLE_HCM_SENSITIVE=1`. |
+| **`--write`** / `ORACLE_HCM_WRITE=1` | **Bypasses everything**: no approval queue, no SENSITIVE gate, no prod-profile write lock — mutations (including payslip/bank/comp) run **immediately**. Use only for trusted automation. |
 
 Unknown / future `hcm_*` tools are classified as **write** (safe default).
 

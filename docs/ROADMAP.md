@@ -2,46 +2,52 @@
 
 > Not an Oracle product. Priorities may change. Perfect ADF coverage is **not** a goal.
 
-## Shipped in v0.5
+## Shipped in v0.6
 
 | # | Capability | Notes |
 |---|------------|--------|
-| 1 | **Live Fusion smoke profile** | `hcm_smoke_probe` / `hcm_list_smoke_reports` — 200/403/404 matrix saved per env |
-| 2 | **OAuth UI polish** | Setup wizard token refresh/expiry + “test as user”; MCP `hcm_oauth_*` / `hcm_test_as_user` |
-| 3 | **Cursor MCP one-click export** | Setup UI reinstall steps + `hcm_emit_profile_mcp_config` |
-| 4 | **Bulk BP dry-run / preview** | `hcm_bulk_bp_dry_run` + richer `hcm_bulk_bp_preview` |
-| 5 | **Person deep-read pack** | Legislative, work relationships, assignment history, `hcm_person_deep_read` |
-| 6 | **Recruiting depth** | Offers, interviews, candidate attachments (curated) |
-| 7 | **Time submit E2E** | `hcm_validate_time_card` → `hcm_submit_time_card` / `hcm_recipe_time_submit` |
-| 8 | **Benefits enroll/opt-out** | Approval-gated `hcm_enroll_benefit` / `hcm_opt_out_benefit` |
-| 9 | **Recipes** | `hcm_recipe_new_hire_checklist`, `hcm_recipe_absence_balance_approve`, `hcm_recipe_time_submit` |
-| 10 | **Stronger schemas/examples** | Zod describes + examples on v0.5 tools |
-| 11 | **Redaction audit log** | `hcm_list_redaction_audit` — fields stripped/masked |
-| 12 | **Multi-env switcher** | Profiles dummy/sandbox/prod — `hcm_list_profiles` / `hcm_switch_profile` |
-| 13 | **Atom CDC real-pod hooks + replay** | `hcm_atom_replay`, `hcm_atom_real_pod_guide` |
-| 14 | **Webhook mTLS / rotating secrets** | `ORACLE_HCM_WEBHOOK_SECRETS`, mTLS env, `hcm_webhook_rotate_secret` |
-| 15 | **Approval UI** | Tiny localhost page (`npm run approval-ui`) |
-| 16 | **OpenAPI → allowlist codegen** | `scripts/openapi-allowlist-codegen.mjs` |
-| 17 | **Perf** | Connection pool agents, 429 backoff tuning, `hcm_batch_get` |
-| + | **Learning/goals writes** | Approval-gated create/update/enroll |
-| + | **Compensation light update** | Sensitive-gated PATCH |
-| + | **Absence LOV helpers** | get type/plan + `hcm_balance_by_plan` |
+| 1 | **Performance Management** | review cycles, feedback, check-ins |
+| 2 | **Learning depth** | assignments, completions |
+| 3 | **Compensation packs** | salary basis / grade step LOVs + offer letter fields (SENSITIVE in default only) |
+| 4 | **Workforce Structures** | departments tree, job families, position hierarchy |
+| 5 | **Document Records** | list/upload + local PII redaction; approval in default |
+| 6 | **Journeys / onboarding** | journey tasks beyond allocated checklists |
+| 7 | **Absence enhancements** | entitlement calc preview, accrual by date, type/plan LOV |
+| 8 | **Recipes** | transfer, terminate, promote, contingent worker, mass absence approve |
+| 9 | **Dry-run write preview** | `hcm_preview_write` (optional; not required under --write) |
+| 10 | **Field maps** | Oracle ↔ friendly names |
+| 11 | **Role/privilege probe** | smoke + 403 → duty hints |
+| 12 | **Live Atom CDC + durable cursors** | `hcm_atom_cdc_status` |
+| 13 | **Webhook replay protection** | nonce + timestamp → 409 |
+| 14 | **Approval UI polish** | domain filter, bulk approve, audit export |
+| 15 | **Tenant OpenAPI → allowlist** | `hcm_refresh_allowlist_from_openapi` |
+| 16 | **Multi-tenant profiles** | `--write` always wins (no prod write lock) |
+| 17 | **OTBI thin read** | catalog stub |
+| 18 | **Benefits dependents / life events** | curated search |
+| 19 | **Payroll costing / element entries** | SENSITIVE in default only |
+| 20 | **Talent pools** | curated + dummy |
+
+### Safety invariant (v0.6 lock)
+
+- Default = approval-by-default for writes.
+- **`--write` / `ORACLE_HCM_WRITE=1` bypasses approval + SENSITIVE + prod-profile lock.**
+- SENSITIVE classification matters **only** in default mode.
+
+## Shipped in v0.5
+
+Smoke probe, OAuth/setup polish, person deep-read, recruiting depth, time E2E, benefits write,
+recipes, redaction audit, multi-env profiles, Atom replay, webhook rotate/mTLS, approval UI,
+OpenAPI codegen, batch GET, learning/goals writes, compensation update, absence LOVs.
 
 ## Shipped in v0.4
 
-Atom CDC poll/consume + checkpoints, HMAC webhooks, file/sqlite approvals, curated finders, payslip field parity, HTTP/gRPC e2e.
+Atom CDC poll/consume + checkpoints, HMAC webhooks, file/sqlite approvals, curated finders,
+payslip field parity, HTTP/gRPC e2e.
 
 ## Gaps / not claimed
 
 - Full Oracle CDC product parity / every Atom collection in every pod
 - Perfect payslip / bank field parity with every Fusion release
 - Exhaustive ADF finder catalog for *all* LOVs
+- Full OTBI execute / BI Publisher
 - npm publish (intentionally out of scope for this tree)
-
-## Safety invariants (keep)
-
-- Unofficial disclaimer everywhere
-- Approval-by-default for writes
-- `--write` / `ORACLE_HCM_WRITE=1`
-- CE / generative-AI blocklist
-- Sensitive tools: `ORACLE_HCM_SENSITIVE=1` + approval unless `ORACLE_HCM_SENSITIVE_WRITE=1` with `--write`

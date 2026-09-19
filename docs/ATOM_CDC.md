@@ -18,3 +18,7 @@ npm run dummy-hcm
 5. `hcm_atom_consume` to advance `ORACLE_HCM_ATOM_CHECKPOINT_PATH`.
 
 See also tool `hcm_atom_real_pod_guide`.
+
+## v0.6
+
+`hcm_atom_cdc_status` reports durable cursor store path + checkpoints. File store via `ORACLE_HCM_ATOM_CHECKPOINT_PATH` remains the durable cursor.

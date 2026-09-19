@@ -75,6 +75,24 @@ const ALLOWED_ROOTS = [
   // Atom / change
   'atomfeeds',
   'atomFeeds',
+  // v0.6 domains
+  'reviewCycles',
+  'performanceFeedback',
+  'checkIns',
+  'learningAssignments',
+  'learningCompletions',
+  'salaryBases',
+  'gradeSteps',
+  'jobFamilies',
+  'departments',
+  'documentRecords',
+  'workerJourneys',
+  'journeyTasks',
+  'benefitDependents',
+  'lifeEvents',
+  'talentPools',
+  'payrollCosting',
+  'otbiReports',
 ];
 
 export function normalizeResourcePath(path: string): string {
@@ -90,11 +108,28 @@ export function isBlockedPath(path: string): boolean {
   return BLOCKED_PATTERNS.some((re) => re.test(p));
 }
 
+const runtimeAllowlistExtras = new Set<string>();
+
+export function addAllowlistRoots(roots: string[]): string[] {
+  const added: string[] = [];
+  for (const r of roots) {
+    if (/^[A-Za-z][A-Za-z0-9_]*$/.test(r) && !isBlockedPath(r) && !ALLOWED_ROOTS.includes(r) && !runtimeAllowlistExtras.has(r)) {
+      runtimeAllowlistExtras.add(r);
+      added.push(r);
+    }
+  }
+  return added;
+}
+
+export function listAllowlistRoots(): string[] {
+  return [...new Set([...ALLOWED_ROOTS, ...runtimeAllowlistExtras])].sort();
+}
+
 export function isAllowlistedPath(path: string): boolean {
   if (isBlockedPath(path)) return false;
   const p = normalizeResourcePath(path);
   const root = p.split(/[/?]/)[0] ?? '';
-  return ALLOWED_ROOTS.includes(root);
+  return ALLOWED_ROOTS.includes(root) || runtimeAllowlistExtras.has(root);
 }
 
 export function assertAllowlisted(path: string): void {

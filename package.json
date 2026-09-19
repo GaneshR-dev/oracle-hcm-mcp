@@ -1,6 +1,6 @@
 {
   "name": "oracle-hcm-mcp",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Unofficial Oracle Fusion Cloud HCM MCP server (stdio / Streamable HTTP / gRPC). Not affiliated with Oracle.",
   "type": "module",
   "license": "MIT",
@@ -38,7 +38,8 @@
     "approval-ui": "node scripts/approval-ui-server.mjs",
     "smoke": "node scripts/smoke-probe.mjs",
     "codegen:allowlist": "node scripts/openapi-allowlist-codegen.mjs",
-    "test:v05": "vitest run tests/v05.test.ts"
+    "test:v05": "vitest run tests/v05.test.ts",
+    "test:v06": "vitest run tests/v06.test.ts"
   },
   "engines": {
     "node": ">=18"

@@ -59,6 +59,13 @@ export const SMOKE_PROBE_PATHS: { resource: string; path: string }[] = [
   { resource: 'absenceTypes', path: 'absenceTypes?limit=1' },
   { resource: 'absencePlans', path: 'absencePlans?limit=1' },
   { resource: 'payslips', path: 'payslips?limit=1' },
+  { resource: 'reviewCycles', path: 'reviewCycles?limit=1' },
+  { resource: 'learningAssignments', path: 'learningAssignments?limit=1' },
+  { resource: 'salaryBases', path: 'salaryBases?limit=1' },
+  { resource: 'jobFamilies', path: 'jobFamilies?limit=1' },
+  { resource: 'documentRecords', path: 'documentRecords?limit=1' },
+  { resource: 'workerJourneys', path: 'workerJourneys?limit=1' },
+  { resource: 'talentPools', path: 'talentPools?limit=1' },
 ];
 
 function classify(status: number | null): SmokeStatusClass {
