@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>oracle-hcm-mcp setup (unofficial)</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="wrap">
+    <header class="header">
+      <h1>oracle-hcm-mcp setup</h1>
+      <p class="sub">Local wizard · unofficial MCP · not an Oracle product</p>
+    </header>
+
+    <aside class="disclaimer" role="note">
+      <strong>Unofficial — not affiliated with Oracle.</strong>
+      This project is <em>not</em> an Oracle product, SDK, partner solution, or supported integration.
+      It is not endorsed by Oracle Corporation. You are responsible for Oracle licenses, HCM security
+      roles, privacy/PII rules, and any damage from write operations. Oracle® is a trademark of Oracle
+      Corporation. Use of that name does not imply endorsement. MIT License — no warranty, no liability.
+    </aside>
+
+    <nav class="steps" id="stepNav" aria-label="Wizard steps"></nav>
+
+    <main id="panels">
+      <!-- 0 target -->
+      <section class="panel" data-step="0">
+        <h2>1. Target</h2>
+        <p>Choose where the MCP will talk. Dummy HCM is the local mock (<code>npm run dummy-hcm</code> on :9090).</p>
+        <div class="cards">
+          <label class="card">
+            <input type="radio" name="target" value="dummy" checked />
+            <span class="card-title">Dummy HCM</span>
+            <span class="card-desc">Local mock · basic auth <code>demo</code>/<code>demo</code> · safe for learning</span>
+          </label>
+          <label class="card">
+            <input type="radio" name="target" value="real" />
+            <span class="card-title">Real Fusion</span>
+            <span class="card-desc">Your Oracle Fusion Cloud HCM REST base · use a non-prod env first</span>
+          </label>
+        </div>
+      </section>
+
+      <!-- 1 url -->
+      <section class="panel hidden" data-step="1">
+        <h2>2. Base URL &amp; API version</h2>
+        <label class="field">
+          <span>ORACLE_HCM_BASE_URL</span>
+          <input id="baseUrl" type="url" autocomplete="off" spellcheck="false"
+            placeholder="https://fa-….fa.ocs.oraclecloud.com/hcmRestApi" />
+        </label>
+        <label class="field">
+          <span>ORACLE_HCM_API_VERSION</span>
+          <input id="apiVersion" type="text" value="11.13.18.05" autocomplete="off" spellcheck="false" />
+        </label>
+        <p class="hint">Resources path becomes <code>{base}/resources/{version}/…</code></p>
+      </section>
+
+      <!-- 2 auth -->
+      <section class="panel hidden" data-step="2">
+        <h2>3. Authentication</h2>
+        <p class="hint">Credentials open the HTTP door; <strong>HCM RBAC</strong> still applies. Secrets stay in this browser until you generate config or optionally write <code>.env.local</code>.</p>
+        <label class="field">
+          <span>ORACLE_HCM_AUTH</span>
+          <select id="authMode">
+            <option value="basic">basic</option>
+            <option value="bearer">bearer</option>
+            <option value="oauth">oauth (client credentials)</option>
+            <option value="none">none</option>
+          </select>
+        </label>
+        <div id="authBasic" class="auth-block">
+          <label class="field"><span>Username</span><input id="username" type="text" autocomplete="username" /></label>
+          <label class="field"><span>Password</span><input id="password" type="password" autocomplete="current-password" /></label>
+        </div>
+        <div id="authBearer" class="auth-block hidden">
+          <label class="field"><span>Bearer token</span><input id="bearerToken" type="password" autocomplete="off" /></label>
+        </div>
+        <div id="authOauth" class="auth-block hidden">
+          <label class="field"><span>Token URL</span><input id="tokenUrl" type="url" autocomplete="off" spellcheck="false" /></label>
+          <label class="field"><span>Client ID</span><input id="clientId" type="text" autocomplete="off" /></label>
+          <label class="field"><span>Client secret</span><input id="clientSecret" type="password" autocomplete="off" /></label>
+        </div>
+      </section>
+
+      <!-- 3 write mode -->
+      <section class="panel hidden" data-step="3">
+        <h2>4. Write safety</h2>
+        <div class="cards">
+          <label class="card">
+            <input type="radio" name="writeMode" value="approval" checked />
+            <span class="card-title">Approval (recommended)</span>
+            <span class="card-desc">Mutations return <code>pending_approval</code>. Call <code>hcm_approve_write</code> / <code>hcm_deny_write</code>.</span>
+          </label>
+          <label class="card warn">
+            <input type="radio" name="writeMode" value="write" />
+            <span class="card-title"><code>--write</code> unrestricted</span>
+            <span class="card-desc">Mutations run immediately. Approval tools are <strong>not</strong> registered. Trusted automation / non-prod only.</span>
+          </label>
+        </div>
+      </section>
+
+      <!-- 4 test -->
+      <section class="panel hidden" data-step="4">
+        <h2>5. Test connection</h2>
+        <p>The setup server proxies a cheap <code>workers?limit=1</code> probe. It never returns or logs your password / token / client secret.</p>
+        <button type="button" id="btnTest" class="btn primary">Test connection</button>
+        <pre id="testResult" class="result" hidden></pre>
+      </section>
+
+      <!-- 5 mcp.json -->
+      <section class="panel hidden" data-step="5">
+        <h2>6. Cursor <code>mcp.json</code></h2>
+        <p>Copy into Cursor MCP settings. Two servers: safe default (<code>oracle-hcm</code>) and unrestricted writes (<code>oracle-hcm-write</code>). Secrets are embedded only in what you copy — the setup server does not store them.</p>
+        <div class="row">
+          <button type="button" id="btnCopyMcp" class="btn primary">Copy mcp.json fragment</button>
+          <button type="button" id="btnWriteEnv" class="btn">Optional: write .env.local</button>
+        </div>
+        <pre id="mcpJson" class="result code"></pre>
+        <p id="envWriteMsg" class="hint" hidden></p>
+      </section>
+
+      <!-- 6 cheat sheet -->
+      <section class="panel hidden" data-step="6">
+        <h2>7. How to use</h2>
+        <div class="cheatsheet">
+          <h3>Local dummy</h3>
+          <pre class="result code">npm run dummy-hcm
+# then point MCP at http://127.0.0.1:9090/hcmRestApi (demo/demo)</pre>
+          <h3>Run MCP (stdio)</h3>
+          <pre class="result code">npm run build
+npx oracle-hcm-mcp
+# or: node dist/index.js --base-url http://127.0.0.1:9090/hcmRestApi</pre>
+          <h3>Try first tools</h3>
+          <ul>
+            <li><code>hcm_health</code> / <code>hcm_whoami</code> / <code>hcm_list_resources</code></li>
+            <li><code>hcm_search_workers</code> with <code>limit: 5</code></li>
+            <li>Writes: create → get <code>approval_id</code> → <code>hcm_approve_write</code> (unless <code>--write</code>)</li>
+          </ul>
+          <h3>Docs</h3>
+          <ul>
+            <li><code>README.md</code> · <code>docs/TOOLS.md</code> · <code>docs/SECURITY.md</code></li>
+          </ul>
+          <p class="hint">Remember: unofficial software. Prefer non-production Fusion. Least-privilege roles. Do not commit secrets.</p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <button type="button" id="btnBack" class="btn" disabled>Back</button>
+      <span id="stepLabel" class="step-label"></span>
+      <button type="button" id="btnNext" class="btn primary">Next</button>
+    </footer>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>

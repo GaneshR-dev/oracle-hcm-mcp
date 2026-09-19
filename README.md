@@ -46,6 +46,26 @@ Unknown / future `hcm_*` tools are classified as **write** (safe default).
 - **Streamable HTTP** — `POST /mcp` (plus `GET /health`)
 - **gRPC** — custom bridge wrapping MCP JSON-RPC (`proto/mcp_bridge.proto`)
 
+
+## Setup UI (local wizard)
+
+Interactive setup at **http://127.0.0.1:8790** (localhost only):
+
+```bash
+npm run setup-ui
+# open http://127.0.0.1:8790  (falls back to 8792+ if 8790 is busy)
+```
+
+Walks through Dummy vs Real Fusion → base URL / API version → auth (basic / bearer / oauth) →
+approval vs `--write` → test connection → copy Cursor `mcp.json` fragments for `oracle-hcm` and
+`oracle-hcm-write` → a short how-to cheat sheet.
+
+**Secrets** stay in the browser for generating config. Optional write to `.env.local` (gitignored).
+The setup server can proxy a health/test-connection probe and **never logs or returns** passwords,
+bearer tokens, or client secrets.
+
+> Unofficial wizard for an unofficial MCP — not an Oracle product.
+
 ## Quick start
 
 ```bash
