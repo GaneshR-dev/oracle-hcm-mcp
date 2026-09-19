@@ -28,6 +28,19 @@ const APPROVAL_TOOLS = [
   'hcm_deny_write',
 ];
 
+const V06_TOOLS = [
+  'hcm_search_review_cycles',
+  'hcm_search_learning_assignments',
+  'hcm_search_document_records',
+  'hcm_search_talent_pools',
+  'hcm_recipe_transfer',
+  'hcm_recipe_terminate',
+  'hcm_preview_write',
+  'hcm_atom_poll',
+  'hcm_field_map',
+  'hcm_export_approval_audit',
+];
+
 /** @type {{ section: string, step: string, pass: boolean, detail: string }[]} */
 const results = [];
 const gaps = [];
@@ -49,12 +62,12 @@ function parseTool(result) {
   return { data, isError: Boolean(result?.isError), raw: result };
 }
 
-async function withClient(args, fn) {
+async function withClient(args, fn, extraEnv = {}) {
   const transport = new StdioClientTransport({
     command: 'node',
     args,
     cwd: ROOT,
-    env: ENV,
+    env: { ...ENV, ...extraEnv },
     stderr: 'pipe',
   });
   const stderrChunks = [];
@@ -79,6 +92,15 @@ async function withClient(args, fn) {
 
 async function call(client, name, args = {}) {
   return parseTool(await client.callTool({ name, arguments: args }));
+}
+
+function isBlocked(result) {
+  const msg = JSON.stringify(result.data);
+  return (
+    result.isError ||
+    Boolean(result.data?.error) ||
+    /blocked|traversal|scheme|SENSITIVE|not allowed|allowlist|approval_token/i.test(msg)
+  );
 }
 
 async function runApprovalMode() {
@@ -582,6 +604,211 @@ async function runWriteMode() {
       (blocked.isError || Boolean(blocked.data?.error)) && noPending(blocked.data),
       JSON.stringify(blocked.data).slice(0, 200),
     );
+
+    // --write bypasses SENSITIVE
+    const payslip = await call(client, 'hcm_get_payslip', { payslipId: 'PS1' });
+    record(
+      section,
+      'hcm_get_payslip immediate under --write (SENSITIVE bypass)',
+      !payslip.isError && noPending(payslip.data) && payslip.data.PayslipId === 'PS1',
+      JSON.stringify(payslip.data).slice(0, 200),
+    );
+  });
+}
+
+async function runV03Smoke() {
+  const section = 'C) v0.3 smoke (approval mode)';
+  console.log(`\n=== ${section} ===`);
+  await withClient(['dist/index.js'], async (client) => {
+    const { tools } = await client.listTools();
+    record(section, 'tool count >= 100', tools.length >= 100, `count=${tools.length}`);
+    const setup = await call(client, 'hcm_setup_status', {});
+    record(section, 'hcm_setup_status', !setup.isError && setup.data?.unofficial === true, JSON.stringify(setup.data).slice(0, 200));
+    const atom = await call(client, 'hcm_list_atom_entries', {});
+    record(section, 'hcm_list_atom_entries', !atom.isError && (atom.data?.items?.length ?? 0) > 0, JSON.stringify(atom.data).slice(0, 200));
+    const req = await call(client, 'hcm_search_requisitions', {});
+    record(section, 'hcm_search_requisitions', !req.isError && req.data?.items?.[0]?.RequisitionId, JSON.stringify(req.data).slice(0, 200));
+    const sens = await call(client, 'hcm_get_payslip', { payslipId: 'PS1' });
+    record(section, 'hcm_get_payslip gated without SENSITIVE', sens.isError || String(sens.data?.error ?? '').includes('SENSITIVE'), JSON.stringify(sens.data).slice(0, 200));
+    const dry = await call(client, 'hcm_dry_run_mutate', { method: 'POST', path: 'absences', body: { x: 1 } });
+    record(section, 'hcm_dry_run_mutate', !dry.isError && dry.data?.ok === true, JSON.stringify(dry.data).slice(0, 200));
+  });
+}
+
+async function runV07Security() {
+  const section = 'D) v0.7 security (stdio process)';
+  console.log(`\n=== ${section} ===`);
+  await withClient(['dist/index.js'], async (client) => {
+    const pending = await call(client, 'hcm_create_absence', {
+      body: { personNumber: 'P1001', absenceType: 'Vacation', startDate: '2026-11-01' },
+    });
+    const blob = JSON.stringify(pending.data);
+    record(
+      section,
+      'pending payload never includes approval token',
+      pending.data.pending_approval === true &&
+        pending.data.approval_token === undefined &&
+        !blob.includes(ENV.ORACLE_HCM_APPROVAL_TOKEN),
+      blob.slice(0, 300),
+    );
+
+    const noTok = await call(client, 'hcm_approve_write', { approval_id: pending.data.approval_id });
+    record(
+      section,
+      'approve without token fails',
+      isBlocked(noTok) && pending.data.pending_approval === true,
+      JSON.stringify(noTok.data).slice(0, 200),
+    );
+
+    const wrong = await call(client, 'hcm_approve_write', {
+      approval_id: pending.data.approval_id,
+      approval_token: 'wrong-token',
+    });
+    record(
+      section,
+      'approve with wrong token fails',
+      isBlocked(wrong),
+      JSON.stringify(wrong.data).slice(0, 200),
+    );
+
+    const denied = await call(client, 'hcm_deny_write', {
+      approval_id: pending.data.approval_id,
+      approval_token: ENV.ORACLE_HCM_APPROVAL_TOKEN,
+    });
+    record(
+      section,
+      'deny with correct split-principal token works',
+      !denied.isError && denied.data.denied === true,
+      JSON.stringify(denied.data).slice(0, 200),
+    );
+
+    const trav = await call(client, 'hcm_rest_get', { path: 'workers/../ce/foo' });
+    record(section, 'path traversal rest_get blocked', isBlocked(trav), JSON.stringify(trav.data).slice(0, 200));
+
+    const enc = await call(client, 'hcm_rest_get', { path: 'workers/%2e%2e/ce' });
+    record(section, 'encoded .. rest_get blocked', isBlocked(enc), JSON.stringify(enc.data).slice(0, 200));
+
+    const scheme = await call(client, 'hcm_rest_get', { path: 'https://evil.example/workers' });
+    record(section, 'scheme rest_get blocked', isBlocked(scheme), JSON.stringify(scheme.data).slice(0, 200));
+
+    const payslip = await call(client, 'hcm_rest_get', { path: 'payslips/PS1' });
+    record(
+      section,
+      'hcm_rest_get payslips blocked without SENSITIVE',
+      isBlocked(payslip) && /SENSITIVE/i.test(JSON.stringify(payslip.data)),
+      JSON.stringify(payslip.data).slice(0, 200),
+    );
+
+    const bank = await call(client, 'hcm_rest_get', { path: 'bankAccounts' });
+    record(
+      section,
+      'hcm_rest_get bankAccounts blocked without SENSITIVE',
+      isBlocked(bank) && /SENSITIVE/i.test(JSON.stringify(bank.data)),
+      JSON.stringify(bank.data).slice(0, 200),
+    );
+  });
+
+  await withClient(
+    ['dist/index.js'],
+    async (client) => {
+      const ps = await call(client, 'hcm_rest_get', { path: 'payslips/PS1' });
+      record(
+        section,
+        'hcm_rest_get payslips allowed with SENSITIVE=1',
+        !ps.isError && (ps.data.PayslipId === 'PS1' || (ps.data.items?.length ?? 0) > 0),
+        JSON.stringify(ps.data).slice(0, 200),
+      );
+      const named = await call(client, 'hcm_get_payslip', { payslipId: 'PS1' });
+      record(
+        section,
+        'hcm_get_payslip allowed with SENSITIVE=1',
+        !named.isError && named.data.PayslipId === 'PS1',
+        JSON.stringify(named.data).slice(0, 200),
+      );
+    },
+    { ORACLE_HCM_SENSITIVE: '1' },
+  );
+}
+
+async function runV06DomainSmoke() {
+  const section = 'E) v0.6 domain smoke (approval mode)';
+  console.log(`\n=== ${section} ===`);
+  await withClient(['dist/index.js'], async (client) => {
+    const { tools } = await client.listTools();
+    const names = tools.map((t) => t.name);
+    const missing = V06_TOOLS.filter((n) => !names.includes(n));
+    record(section, 'tool count >= 190', names.length >= 190, `count=${names.length}`);
+    record(section, 'v0.6 tools registered', missing.length === 0, missing.join(',') || 'all present');
+
+    const rc = await call(client, 'hcm_search_review_cycles', { limit: 5 });
+    record(
+      section,
+      'hcm_search_review_cycles',
+      !rc.isError && (rc.data.items?.length ?? 0) > 0,
+      JSON.stringify(rc.data).slice(0, 200),
+    );
+
+    const learn = await call(client, 'hcm_search_learning_assignments', { limit: 5 });
+    record(
+      section,
+      'hcm_search_learning_assignments',
+      !learn.isError && (learn.data.items?.length ?? 0) > 0,
+      JSON.stringify(learn.data).slice(0, 200),
+    );
+
+    const docs = await call(client, 'hcm_search_document_records', { limit: 5 });
+    record(
+      section,
+      'hcm_search_document_records',
+      !docs.isError && (docs.data.items?.length ?? 0) > 0,
+      JSON.stringify(docs.data).slice(0, 200),
+    );
+
+    const pools = await call(client, 'hcm_search_talent_pools', { limit: 5 });
+    record(
+      section,
+      'hcm_search_talent_pools',
+      !pools.isError && (pools.data.items?.length ?? 0) > 0,
+      JSON.stringify(pools.data).slice(0, 200),
+    );
+
+    const preview = await call(client, 'hcm_preview_write', {
+      toolName: 'hcm_create_absence',
+      args: { body: { personNumber: 'P1001', absenceType: 'Vacation', startDate: '2026-11-15' } },
+    });
+    record(
+      section,
+      'hcm_preview_write dry-run',
+      !preview.isError && preview.data.dry_run === true && preview.data.wouldQueueApproval === true,
+      JSON.stringify(preview.data).slice(0, 200),
+    );
+
+    const recipe = await call(client, 'hcm_recipe_transfer', {
+      workerId: '1001',
+      body: { OrganizationId: 'O1' },
+    });
+    record(
+      section,
+      'hcm_recipe_transfer → pending_approval',
+      !recipe.isError && recipe.data.pending_approval === true && Boolean(recipe.data.approval_id),
+      JSON.stringify(recipe.data).slice(0, 200),
+    );
+
+    const atom = await call(client, 'hcm_atom_poll', { collection: 'workers', limit: 10 });
+    record(
+      section,
+      'hcm_atom_poll',
+      !atom.isError && (Array.isArray(atom.data.entries) || Array.isArray(atom.data.items) || atom.data.feedId),
+      JSON.stringify(atom.data).slice(0, 200),
+    );
+
+    const fmap = await call(client, 'hcm_field_map', { domain: 'worker', oracle: 'PersonNumber' });
+    record(
+      section,
+      'hcm_field_map',
+      !fmap.isError && (fmap.data.resolved || fmap.data.entries || fmap.data.friendly),
+      JSON.stringify(fmap.data).slice(0, 200),
+    );
   });
 }
 
@@ -590,7 +817,7 @@ function writeReport() {
   const failed = results.filter((r) => !r.pass).length;
   const verdict =
     failed === 0
-      ? 'PASS — both approval and --write modes work against dummy HCM'
+      ? 'PASS — stdio MCP e2e against dummy HCM (approval, --write, v0.3, v0.6, v0.7)'
       : `FAIL — ${failed} step(s) failed (see details)`;
 
   const lines = [
@@ -599,7 +826,7 @@ function writeReport() {
     `- Date: ${new Date().toISOString()} (box UTC; user zone Asia/Calcutta)`,
     `- Target: http://127.0.0.1:9090 (dummy HCM, basic auth demo/demo)`,
     `- Script: scripts/e2e-stdio.mjs (MCP Client + StdioClientTransport)`,
-    `- Server: node dist/index.js [ --write ]`,
+    `- Server: node dist/index.js [ --write ]  (v0.7.0)`,
     '',
     `## Verdict: **${verdict}**`,
     '',
@@ -629,37 +856,20 @@ function writeReport() {
   }
   lines.push('', '## Notes', '');
   lines.push(
-    '- Approval tools remain registered in `--write` mode (v0.3) so sensitive tools can still require approval unless `ORACLE_HCM_SENSITIVE_WRITE=1`.',
+    '- Approval tools remain registered in `--write` mode so sensitive tools can still require approval unless `ORACLE_HCM_SENSITIVE_WRITE=1` or `--write` (which bypasses all gates).',
   );
   lines.push(
     '- `hcm_rest_mutate` to CE/generative-AI style paths is rejected by allowlist/blocklist before pending approval or execution.',
   );
-  lines.push('- Dummy HCM covers v0.3 paths including atomfeeds, recruiting, benefits, payslips (gated), checklists allocate/forceClose, nested assignments, etc.', '');
+  lines.push(
+    '- v0.7: `ORACLE_HCM_APPROVAL_TOKEN` is never returned in pending payloads; HTTP/gRPC bearer is fail-closed; SENSITIVE resource roots apply to `hcm_rest_get`.',
+  );
+  lines.push('- Dummy HCM covers v0.3–v0.6 paths including atomfeeds, recruiting, benefits, payslips (gated), checklists, performance, learning, recipes.', '');
 
   fs.writeFileSync(REPORT_PATH, lines.join('\n'));
   console.log(`\nWrote ${REPORT_PATH}`);
   console.log(`\nSUMMARY: ${passed} passed, ${failed} failed — ${verdict}`);
   return failed === 0;
-}
-
-
-async function runV03Smoke() {
-  const section = 'C) v0.3 smoke (approval mode)';
-  console.log(`\n=== ${section} ===`);
-  await withClient(['dist/index.js'], async (client) => {
-    const { tools } = await client.listTools();
-    record(section, 'tool count >= 100', tools.length >= 100, `count=${tools.length}`);
-    const setup = await call(client, 'hcm_setup_status', {});
-    record(section, 'hcm_setup_status', !setup.isError && setup.data?.unofficial === true, JSON.stringify(setup.data).slice(0, 200));
-    const atom = await call(client, 'hcm_list_atom_entries', {});
-    record(section, 'hcm_list_atom_entries', !atom.isError && (atom.data?.items?.length ?? 0) > 0, JSON.stringify(atom.data).slice(0, 200));
-    const req = await call(client, 'hcm_search_requisitions', {});
-    record(section, 'hcm_search_requisitions', !req.isError && req.data?.items?.[0]?.RequisitionId, JSON.stringify(req.data).slice(0, 200));
-    const sens = await call(client, 'hcm_get_payslip', { payslipId: 'PS1' });
-    record(section, 'hcm_get_payslip gated without SENSITIVE', sens.isError || String(sens.data?.error ?? '').includes('SENSITIVE'), JSON.stringify(sens.data).slice(0, 200));
-    const dry = await call(client, 'hcm_dry_run_mutate', { method: 'POST', path: 'absences', body: { x: 1 } });
-    record(section, 'hcm_dry_run_mutate', !dry.isError && dry.data?.ok === true, JSON.stringify(dry.data).slice(0, 200));
-  });
 }
 
 async function main() {
@@ -675,6 +885,8 @@ async function main() {
   await runApprovalMode();
   await runWriteMode();
   await runV03Smoke();
+  await runV07Security();
+  await runV06DomainSmoke();
   const ok = writeReport();
   process.exit(ok ? 0 : 1);
 }

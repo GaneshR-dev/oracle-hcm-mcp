@@ -65,11 +65,35 @@ async function runHttp() {
     const health = await (await fetch(`http://127.0.0.1:${HTTP_PORT}/health`)).json();
     console.log('  [PASS] health', health.version ?? health.ok);
 
+    const unauthMcp = await fetch(`http://127.0.0.1:${HTTP_PORT}/mcp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    if (unauthMcp.status !== 401) throw new Error(`/mcp without bearer expected 401 got ${unauthMcp.status}`);
+    console.log('  [PASS] /mcp 401 without bearer');
+
+    const unauthAppr = await fetch(`http://127.0.0.1:${HTTP_PORT}/approvals`);
+    if (unauthAppr.status !== 401) throw new Error(`/approvals without bearer expected 401 got ${unauthAppr.status}`);
+    console.log('  [PASS] /approvals 401 without bearer');
+
+    const badTok = await fetch(`http://127.0.0.1:${HTTP_PORT}/approvals`, {
+      headers: { Authorization: 'Bearer wrong-token' },
+    });
+    if (badTok.status !== 401) throw new Error(`/approvals wrong bearer expected 401 got ${badTok.status}`);
+    console.log('  [PASS] /approvals 401 with wrong bearer');
+
+    const evil = await fetch(`http://127.0.0.1:${HTTP_PORT}/health`, {
+      headers: { Origin: 'https://evil.example' },
+    });
+    if (evil.status !== 403) throw new Error(`evil origin expected 403 got ${evil.status}`);
+    console.log('  [PASS] Origin 403 for non-localhost');
+
     const transport = new StreamableHTTPClientTransport(
       new URL(`http://127.0.0.1:${HTTP_PORT}/mcp`),
       { requestInit: { headers: { Authorization: `Bearer ${ENV.ORACLE_HCM_HTTP_TOKEN}` } } },
     );
-    const client = new Client({ name: 'e2e-http', version: '0.4.0' });
+    const client = new Client({ name: 'e2e-http', version: '0.7.0' });
     await client.connect(transport);
     const { tools } = await client.listTools();
     console.log(`  [PASS] tools/list count=${tools.length}`);
@@ -83,6 +107,10 @@ async function runHttp() {
       }),
     );
     if (!pending.pending_approval) throw new Error('expected pending');
+    if (pending.approval_token || JSON.stringify(pending).includes(ENV.ORACLE_HCM_APPROVAL_TOKEN)) {
+      throw new Error('approval token leaked over HTTP');
+    }
+    console.log('  [PASS] pending payload has no approval token');
     const denied = parseTool(
       await client.callTool({
         name: 'hcm_deny_write',
@@ -110,40 +138,70 @@ async function runGrpc() {
     oneofs: true,
   });
   const loaded = grpc.loadPackageDefinition(def);
-  const client = new loaded.mcpbridge.McpBridge(
-    `127.0.0.1:${GRPC_PORT}`,
-    grpc.credentials.createInsecure(),
-  );
-  const md = new grpc.Metadata();
-  md.set('authorization', `Bearer ${ENV.ORACLE_HCM_HTTP_TOKEN}`);
-  const call = (msg) =>
+  const makeClient = () =>
+    new loaded.mcpbridge.McpBridge(`127.0.0.1:${GRPC_PORT}`, grpc.credentials.createInsecure());
+
+  const callWith = (client, msg, md) =>
     new Promise((resolve, reject) => {
       client.Call({ json_rpc: JSON.stringify(msg) }, md, (err, res) => {
         if (err) reject(err);
         else resolve(JSON.parse(res.json_rpc));
       });
     });
+
+  const client = makeClient();
+  const md = new grpc.Metadata();
+  md.set('authorization', `Bearer ${ENV.ORACLE_HCM_HTTP_TOKEN}`);
   try {
-    const init = await call({
-      jsonrpc: '2.0',
-      id: 1,
-      method: 'initialize',
-      params: {
-        protocolVersion: '2024-11-05',
-        capabilities: {},
-        clientInfo: { name: 'e2e-grpc', version: '0.4.0' },
+    const unauth = makeClient();
+    const emptyMd = new grpc.Metadata();
+    let unauthFailed = false;
+    try {
+      await callWith(
+        unauth,
+        {
+          jsonrpc: '2.0',
+          id: 99,
+          method: 'initialize',
+          params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'x', version: '0' } },
+        },
+        emptyMd,
+      );
+    } catch (e) {
+      unauthFailed = /UNAUTHENTICATED|16/i.test(String(e));
+    }
+    unauth.close();
+    if (!unauthFailed) throw new Error('gRPC without bearer should be UNAUTHENTICATED');
+    console.log('  [PASS] gRPC UNAUTHENTICATED without bearer');
+
+    const init = await callWith(
+      client,
+      {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2024-11-05',
+          capabilities: {},
+          clientInfo: { name: 'e2e-grpc', version: '0.7.0' },
+        },
       },
-    });
+      md,
+    );
     console.log('  [PASS] initialize', init.result?.serverInfo?.version);
-    await call({ jsonrpc: '2.0', method: 'notifications/initialized' });
-    const listed = await call({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
+    await callWith(client, { jsonrpc: '2.0', method: 'notifications/initialized' }, md);
+    const listed = await callWith(client, { jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }, md);
     console.log(`  [PASS] tools/list count=${listed.result?.tools?.length}`);
-    const health = await call({
-      jsonrpc: '2.0',
-      id: 3,
-      method: 'tools/call',
-      params: { name: 'hcm_health', arguments: {} },
-    });
+    const health = await callWith(
+      client,
+      {
+        jsonrpc: '2.0',
+        id: 3,
+        method: 'tools/call',
+        params: { name: 'hcm_health', arguments: {} },
+      },
+      md,
+    );
     const body = JSON.parse(health.result.content.find((c) => c.type === 'text').text);
     if (!body.ok) throw new Error('grpc health failed');
     console.log('  [PASS] hcm_health via gRPC');
@@ -153,13 +211,17 @@ async function runGrpc() {
   }
 }
 
-const okHttp = await runHttp().then(() => true).catch((e) => {
-  console.error('HTTP e2e FAIL', e);
-  return false;
-});
-const okGrpc = await runGrpc().then(() => true).catch((e) => {
-  console.error('gRPC e2e FAIL', e);
-  return false;
-});
+const okHttp = await runHttp()
+  .then(() => true)
+  .catch((e) => {
+    console.error('HTTP e2e FAIL', e);
+    return false;
+  });
+const okGrpc = await runGrpc()
+  .then(() => true)
+  .catch((e) => {
+    console.error('gRPC e2e FAIL', e);
+    return false;
+  });
 if (!okHttp || !okGrpc) process.exit(1);
 console.log('\nAll HTTP/gRPC e2e checks passed.');

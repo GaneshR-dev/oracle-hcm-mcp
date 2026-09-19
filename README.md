@@ -85,6 +85,7 @@ bearer tokens, or client secrets.
 npm install
 npm run build
 npm test
+npm run e2e        # dummy HCM + stdio/HTTP/gRPC + setup/approval UI
 
 # Local mock HCM (basic auth demo/demo) on :9090
 npm run dummy-hcm

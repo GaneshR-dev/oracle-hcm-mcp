@@ -35,6 +35,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "setup-ui": "node scripts/setup-ui-server.mjs",
     "e2e:http-grpc": "node scripts/e2e-http-grpc.mjs",
+    "e2e:stdio": "node scripts/e2e-stdio.mjs",
+    "e2e": "node scripts/e2e-all.mjs",
     "approval-ui": "node scripts/approval-ui-server.mjs",
     "smoke": "node scripts/smoke-probe.mjs",
     "codegen:allowlist": "node scripts/openapi-allowlist-codegen.mjs",
