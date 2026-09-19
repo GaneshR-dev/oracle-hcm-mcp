@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolContext } from './helpers.js';
 import { gateWrite, runRead, jsonResult, errorResult } from './helpers.js';
-import { ALLOWED_ROOTS } from '../../policy/allowlist.js';
+import { ALLOWED_ROOTS, assertAllowlisted } from '../../policy/allowlist.js';
 
 const RESOURCE_CATALOG = [
   { name: 'workers', path: 'workers', description: 'HCM workers (person + work relationships)' },
@@ -477,10 +477,17 @@ function registerGeneric(server: McpServer, ctx: ToolContext): void {
       },
       annotations: { readOnlyHint: false },
     },
-    async ({ method, path, body }) =>
-      gateWrite(ctx, 'hcm_rest_mutate', { method, path, body }, () =>
+    async ({ method, path, body }) => {
+      try {
+        // Reject blocked/non-allowlisted paths before creating a pending approval.
+        assertAllowlisted(path);
+      } catch (err) {
+        return errorResult(err);
+      }
+      return gateWrite(ctx, 'hcm_rest_mutate', { method, path, body }, () =>
         ctx.client.restMutate(method, path, body),
-      ),
+      );
+    },
   );
 }
 
