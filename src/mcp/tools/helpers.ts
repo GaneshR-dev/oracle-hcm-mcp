@@ -7,6 +7,7 @@ import { isSensitiveTool } from '../../policy/sensitive.js';
 import type { Config } from '../../config.js';
 import { redactDeep } from '../../platform/redact.js';
 import type { WebhookReceiver } from '../../platform/webhookStub.js';
+import type { CheckpointStore } from '../../platform/atomCdc.js';
 
 export type WriteExecutor = (args: Record<string, unknown>) => Promise<unknown>;
 
@@ -25,6 +26,7 @@ export type ToolContext = {
   executors: Map<string, WriteExecutor>;
   auditTrail: AuditEntry[];
   webhook?: WebhookReceiver;
+  atomCheckpoints: CheckpointStore;
 };
 
 export function bindExecutor(

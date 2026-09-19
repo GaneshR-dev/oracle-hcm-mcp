@@ -7,7 +7,7 @@
 - This MCP can read and **mutate** HCM data when credentials allow.
 - Default mode adds a **human approval gate** in-process; it is not a substitute for IAM, network controls, or change management.
 - `--write` disables that gate entirely.
-- Pending approvals live **in memory** of the MCP process (lost on restart; not multi-node safe).
+- Pending approvals default to **in memory**. For multi-process / multi-node, set `ORACLE_HCM_APPROVAL_STORE=file|sqlite` and `ORACLE_HCM_APPROVAL_STORE_PATH` so approval-mode and HTTP `GET /approvals` share the same store.
 
 ## Recommendations
 
@@ -23,7 +23,7 @@
 
 Paths matching CE, generative AI, Oracle-internal, embedding/LLM-style segments are rejected by `policy/allowlist.ts` before the HTTP call.
 
-## Sensitive tools (v0.3)
+## Sensitive tools (v0.3+)
 
 Payslip, bank account, national identifier, and compensation tools require:
 
@@ -31,3 +31,29 @@ Payslip, bank account, national identifier, and compensation tools require:
 2. Human approval via `hcm_approve_write` **even when** `--write` is set, unless `ORACLE_HCM_SENSITIVE_WRITE=1` is also set.
 
 Tool results pass through redaction middleware (secrets stripped; some ID fields masked).
+
+## Webhook signing (v0.4)
+
+When `ORACLE_HCM_WEBHOOK_SECRET` is set (or passed to `hcm_start_webhook_receiver`):
+
+- Clients must send `X-HCM-Signature: sha256=<hmac-sha256-hex of raw body>`
+- Aliases accepted: `X-Hub-Signature-256`, `X-Signature`
+- Missing or invalid signatures → **401** (body not stored)
+
+```bash
+# Example (Node)
+import { createHmac } from 'node:crypto';
+const body = JSON.stringify({ event: 'demo' });
+const sig = 'sha256=' + createHmac('sha256', process.env.ORACLE_HCM_WEBHOOK_SECRET)
+  .update(body).digest('hex');
+await fetch('http://127.0.0.1:8795/webhook', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', 'X-HCM-Signature': sig },
+  body,
+});
+```
+
+## Atom CDC checkpoints (v0.4)
+
+`hcm_atom_poll` / `hcm_atom_consume` store cursors locally (`ORACLE_HCM_ATOM_CHECKPOINT_PATH`).
+This is **not** Oracle CDC — local unofficial change detection over Atom feeds.

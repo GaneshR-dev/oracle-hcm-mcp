@@ -10,9 +10,9 @@ Unofficial Model Context Protocol (MCP) server for **Oracle Fusion Cloud HCM** R
 
 ## Status
 
-v0.3 — expands curated domains (recruiting, benefits, atom/change, deeper checklists/assignments,
-manager/org helpers, time/absence LOVs, talent/learning, gated payslip/bank/national-ID, agent UX,
-setup tools, rate-limit/backoff, webhook stub). **~110 tools**. Perfect ADF coverage is **not** a goal.
+v0.4 — Atom CDC (poll/consume + checkpoints), HMAC webhook signing, file/sqlite multi-node approvals,
+curated ADF finders (`hcm_lov_find` / `hcm_describe_finder`), richer payslip fields, heavier HTTP/gRPC e2e.
+Builds on v0.3 curated domains. **110+ tools**. Perfect ADF coverage is **not** a goal.
 See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ### Honest coverage
@@ -116,10 +116,14 @@ oracle-hcm-mcp --base-url http://127.0.0.1:9090/hcmRestApi
 | `ORACLE_HCM_SENSITIVE=1` | Enable payslip / bank / national-ID tools |
 | `ORACLE_HCM_SENSITIVE_WRITE=1` | Allow sensitive tools to skip approval when combined with `--write` |
 | `ORACLE_HCM_PROFILE` | Optional multi-env profile label |
+| `ORACLE_HCM_APPROVAL_STORE` | `memory` (default) \| `file` \| `sqlite` — multi-node pending approvals |
+| `ORACLE_HCM_APPROVAL_STORE_PATH` | Path for file/sqlite approval store |
+| `ORACLE_HCM_WEBHOOK_SECRET` | HMAC-SHA256 secret for webhook receiver (`X-HCM-Signature`) |
+| `ORACLE_HCM_ATOM_CHECKPOINT_PATH` | Atom CDC checkpoint JSON path |
 
 Auth note: credentials open the HTTP door; **HCM RBAC** still decides what the user/app can do.
 
-## Tools (v0.3)
+## Tools (v0.4)
 
 **Meta / setup:** `hcm_health`, `hcm_whoami`, `hcm_list_resources`, `hcm_describe_resource`, `hcm_setup_status`, `hcm_test_connection`, `hcm_emit_mcp_config`, `hcm_export_config`
 
@@ -143,7 +147,13 @@ Auth note: credentials open the HTTP door; **HCM RBAC** still decides what the u
 
 **Generic (allowlisted):** `hcm_rest_get`, `hcm_rest_mutate`
 
-**Approval (only when not `--write`):** `hcm_list_pending_approvals`, `hcm_approve_write`, `hcm_deny_write`
+**Atom CDC:** `hcm_list_atom_feeds`, `hcm_get_atom_feed`, `hcm_list_atom_entries`, `hcm_get_atom_entry`,
+`hcm_detect_changes`, `hcm_atom_poll`, `hcm_atom_consume`, `hcm_atom_get_checkpoint`, `hcm_atom_reset_checkpoint`
+
+**Finders:** `hcm_lov_finder`, `hcm_lov_find`, `hcm_describe_finder`, `hcm_resolve_uniq_key`
+
+**Approval:** `hcm_list_pending_approvals`, `hcm_approve_write`, `hcm_deny_write`
+(always registered; file/sqlite store optional for multi-node)
 
 CE / generative-AI / Oracle-internal style paths are **blocklisted** for generic REST.
 

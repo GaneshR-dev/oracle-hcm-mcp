@@ -93,8 +93,18 @@ const READ_TOOLS = new Set([
   'hcm_probe_capabilities',
   'hcm_rbac_hint',
   'hcm_list_webhook_events',
-  'hcm_export_config',
+    'hcm_export_config',
+  'hcm_list_atom_feeds',
+  'hcm_get_atom_feed',
+  'hcm_get_atom_entry',
+  'hcm_atom_poll',
+  'hcm_atom_consume',
+  'hcm_atom_get_checkpoint',
+  'hcm_atom_reset_checkpoint',
+  'hcm_lov_find',
+  'hcm_describe_finder',
 ]);
+
 
 const WRITE_TOOLS = new Set([
   'hcm_create_worker',

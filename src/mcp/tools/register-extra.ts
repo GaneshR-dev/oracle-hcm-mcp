@@ -1,5 +1,5 @@
 /**
- * v0.3 curated tools — recruiting, benefits, atom, sensitive payroll, agent UX, etc.
+ * v0.3+v0.4 curated tools — recruiting, benefits, atom CDC, finders, sensitive payroll, agent UX, etc.
  * Unofficial — not affiliated with Oracle.
  */
 import { z } from 'zod';
@@ -20,6 +20,18 @@ import { SENSITIVE_TOOLS } from '../../policy/sensitive.js';
 import { RESOURCE_CATALOG } from './register-core.js';
 import { WebhookReceiver } from '../../platform/webhookStub.js';
 import { redactDeep } from '../../platform/redact.js';
+import {
+  parseAtomEntry,
+  entriesAfterCursor,
+  entryCursor,
+  feedIdForCollection,
+} from '../../platform/atomCdc.js';
+import {
+  listFinders,
+  describeFinder,
+  buildFinderExpression,
+  FINDER_CATALOG,
+} from '../../policy/finders.js';
 
 const listArgs = {
   q: z.string().optional(),
@@ -68,6 +80,67 @@ export function registerExtraTools(server: McpServer, ctx: ToolContext): void {
 
 function registerAtom(server: McpServer, ctx: ToolContext): void {
   server.registerTool(
+    'hcm_list_atom_feeds',
+    {
+      description:
+        'List known Atom / change-detection feeds (collection-oriented). Dummy exposes workers/absences/all.',
+      inputSchema: {},
+      annotations: { readOnlyHint: true },
+    },
+    async () =>
+      runRead(async () => {
+        const feeds = [
+          { feedId: 'atom:workers', title: 'Workers changes', collection: 'workers', href: 'atomfeeds?q=Collection=workers' },
+          { feedId: 'atom:absences', title: 'Absences changes', collection: 'absences', href: 'atomfeeds?q=Collection=absences' },
+          { feedId: 'atom:all', title: 'All Atom entries', collection: '*', href: 'atomfeeds' },
+        ];
+        return { feeds, note: 'Unofficial Atom feed list — not Oracle CDC catalog.' };
+      }, ctx, 'hcm_list_atom_feeds'),
+  );
+
+  server.registerTool(
+    'hcm_get_atom_feed',
+    {
+      description:
+        'Get an Atom feed as JSON entries (or request format=atom for XML via dummy). Supports since ISO filter.',
+      inputSchema: {
+        collection: z.string().optional().describe('workers | absences | omit for all'),
+        since: z.string().optional(),
+        limit: z.number().int().positive().optional(),
+        format: z.enum(['json', 'atom']).optional(),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    async (args) =>
+      runRead(async () => {
+        const feed = await ctx.client.list('atomfeeds', {
+          q: args.collection ? `Collection=${args.collection}` : undefined,
+          limit: args.limit ?? 50,
+        });
+        let entries = (feed.items as Record<string, unknown>[]).map(parseAtomEntry);
+        if (args.since) {
+          const sinceMs = Date.parse(args.since);
+          entries = entries.filter((e) => Date.parse(e.updated) >= sinceMs);
+        }
+        if (args.format === 'atom') {
+          const { entriesToAtomXml } = await import('../../platform/atomCdc.js');
+          const xml = entriesToAtomXml(
+            `HCM ${args.collection ?? 'all'}`,
+            feedIdForCollection(args.collection ?? 'all'),
+            entries,
+          );
+          return { format: 'atom', xml, count: entries.length };
+        }
+        return {
+          feedId: feedIdForCollection(args.collection ?? 'all'),
+          format: 'json',
+          count: entries.length,
+          entries,
+        };
+      }, ctx, 'hcm_get_atom_feed'),
+  );
+
+  server.registerTool(
     'hcm_list_atom_entries',
     {
       description:
@@ -87,6 +160,20 @@ function registerAtom(server: McpServer, ctx: ToolContext): void {
         ctx,
         'hcm_list_atom_entries',
       ),
+  );
+
+  server.registerTool(
+    'hcm_get_atom_entry',
+    {
+      description: 'Get a single Atom entry by EntryId.',
+      inputSchema: { entryId: z.string() },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ entryId }) =>
+      runRead(async () => {
+        const raw = await ctx.client.getJson(`atomfeeds/${encodeURIComponent(entryId)}`);
+        return parseAtomEntry(raw as Record<string, unknown>);
+      }, ctx, 'hcm_get_atom_entry'),
   );
 
   server.registerTool(
@@ -120,6 +207,123 @@ function registerAtom(server: McpServer, ctx: ToolContext): void {
           note: 'Unofficial change detection over atomfeeds; not Oracle CDC.',
         };
       }, ctx, 'hcm_detect_changes'),
+  );
+
+  server.registerTool(
+    'hcm_atom_poll',
+    {
+      description:
+        'Poll Atom feed for entries after the stored checkpoint cursor (or since). Does not advance cursor.',
+      inputSchema: {
+        collection: z.string().optional().default('all'),
+        since: z.string().optional().describe('Override cursor with ISO timestamp'),
+        limit: z.number().int().positive().optional(),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    async (args) =>
+      runRead(async () => {
+        const collection = args.collection && args.collection !== 'all' ? args.collection : undefined;
+        const feedId = feedIdForCollection(collection ?? 'all');
+        const cp = ctx.atomCheckpoints.get(feedId);
+        const feed = await ctx.client.list('atomfeeds', {
+          q: collection ? `Collection=${collection}` : undefined,
+          limit: args.limit ?? 100,
+        });
+        const parsed = (feed.items as Record<string, unknown>[]).map(parseAtomEntry);
+        let cursor = cp?.cursor;
+        if (args.since) {
+          cursor = `${args.since}::`;
+        }
+        const fresh = entriesAfterCursor(parsed, cursor);
+        return {
+          feedId,
+          checkpoint: cp ?? null,
+          cursorUsed: cursor ?? null,
+          count: fresh.length,
+          entries: fresh.slice(0, args.limit ?? 100),
+          note: 'Poll only — call hcm_atom_consume to advance checkpoint.',
+        };
+      }, ctx, 'hcm_atom_poll'),
+  );
+
+  server.registerTool(
+    'hcm_atom_consume',
+    {
+      description:
+        'Consume (poll + advance checkpoint) Atom entries after cursor. Persists checkpoint to file store.',
+      inputSchema: {
+        collection: z.string().optional().default('all'),
+        limit: z.number().int().positive().optional(),
+        dryRun: z.boolean().optional().describe('If true, do not advance checkpoint'),
+      },
+      annotations: { readOnlyHint: false },
+    },
+    async (args) =>
+      runRead(async () => {
+        const collection = args.collection && args.collection !== 'all' ? args.collection : undefined;
+        const feedId = feedIdForCollection(collection ?? 'all');
+        const cp = ctx.atomCheckpoints.get(feedId);
+        const feed = await ctx.client.list('atomfeeds', {
+          q: collection ? `Collection=${collection}` : undefined,
+          limit: args.limit ?? 100,
+        });
+        const parsed = (feed.items as Record<string, unknown>[]).map(parseAtomEntry);
+        const fresh = entriesAfterCursor(parsed, cp?.cursor);
+        const batch = fresh.slice(0, args.limit ?? 100);
+        let checkpoint = cp;
+        if (!args.dryRun && batch.length > 0) {
+          const last = batch[batch.length - 1];
+          checkpoint = {
+            feedId,
+            cursor: entryCursor(last),
+            updatedAt: new Date().toISOString(),
+            lastEntryId: last.entryId,
+            consumedCount: (cp?.consumedCount ?? 0) + batch.length,
+          };
+          ctx.atomCheckpoints.set(checkpoint);
+        }
+        return {
+          feedId,
+          consumed: batch.length,
+          dryRun: Boolean(args.dryRun),
+          entries: batch,
+          checkpoint: checkpoint ?? null,
+          storePath: ctx.atomCheckpoints.path ?? null,
+        };
+      }, ctx, 'hcm_atom_consume'),
+  );
+
+  server.registerTool(
+    'hcm_atom_get_checkpoint',
+    {
+      description: 'Get Atom CDC checkpoint(s) from local store.',
+      inputSchema: { collection: z.string().optional() },
+      annotations: { readOnlyHint: true },
+    },
+    async (args) =>
+      runRead(async () => {
+        if (args.collection) {
+          const feedId = feedIdForCollection(args.collection);
+          return { checkpoint: ctx.atomCheckpoints.get(feedId) ?? null, storePath: ctx.atomCheckpoints.path ?? null };
+        }
+        return { checkpoints: ctx.atomCheckpoints.list(), storePath: ctx.atomCheckpoints.path ?? null };
+      }, ctx, 'hcm_atom_get_checkpoint'),
+  );
+
+  server.registerTool(
+    'hcm_atom_reset_checkpoint',
+    {
+      description: 'Clear Atom CDC checkpoint for a collection (or all). Local store only.',
+      inputSchema: { collection: z.string().optional() },
+      annotations: { readOnlyHint: false },
+    },
+    async (args) =>
+      runRead(async () => {
+        if (args.collection) ctx.atomCheckpoints.clear(feedIdForCollection(args.collection));
+        else ctx.atomCheckpoints.clear();
+        return { reset: true, collection: args.collection ?? '*' };
+      }, ctx, 'hcm_atom_reset_checkpoint'),
   );
 }
 
@@ -285,7 +489,7 @@ function registerLovHelpers(server: McpServer, ctx: ToolContext): void {
     'hcm_lov_finder',
     {
       description:
-        'Better LOV finder helper — runs finder= on an allowlisted LOV root (organizations, locations, jobs, grades, positions, absenceTypes).',
+        'LOV finder helper — runs finder= on an allowlisted LOV root (organizations, locations, jobs, grades, positions, absenceTypes, workers, absences, …).',
       inputSchema: {
         resource: z.string().describe('e.g. locations'),
         finder: z.string().describe('Fusion finder name / expression'),
@@ -303,6 +507,74 @@ function registerLovHelpers(server: McpServer, ctx: ToolContext): void {
           limit: args.limit ?? 25,
         });
       }, ctx, 'hcm_lov_finder'),
+  );
+
+  server.registerTool(
+    'hcm_lov_find',
+    {
+      description:
+        'Structured ADF finder call: resource + finder name + params object (builds finder=name;k=v,…). Prefer over raw finder strings.',
+      inputSchema: {
+        resource: z.string(),
+        finder: z.string().describe('Finder name, e.g. findByCountry'),
+        params: z.record(z.union([z.string(), z.number(), z.boolean()])).optional(),
+        q: z.string().optional(),
+        limit: z.number().int().positive().optional(),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    async (args) =>
+      runRead(async () => {
+        assertAllowlisted(args.resource);
+        const expression = buildFinderExpression(args.finder, args.params as Record<string, string | number | boolean> | undefined);
+        const result = await ctx.client.list(args.resource, {
+          finder: expression,
+          q: args.q,
+          limit: args.limit ?? 25,
+        });
+        return {
+          resource: args.resource,
+          finder: expression,
+          described: describeFinder(args.resource, args.finder) ?? null,
+          ...result,
+        };
+      }, ctx, 'hcm_lov_find'),
+  );
+
+  server.registerTool(
+    'hcm_describe_finder',
+    {
+      description:
+        'Describe curated ADF finder parameters for a resource (or list all finders). Unofficial catalog — not full Fusion metadata.',
+      inputSchema: {
+        resource: z.string().optional(),
+        finder: z.string().optional(),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    async (args) =>
+      runRead(async () => {
+        if (args.resource && args.finder) {
+          const def = describeFinder(args.resource, args.finder);
+          if (!def) {
+            return {
+              found: false,
+              resource: args.resource,
+              finder: args.finder,
+              hint: 'Not in curated catalog; try hcm_lov_find anyway — dummy may still filter params.',
+              catalogSize: FINDER_CATALOG.length,
+            };
+          }
+          return { found: true, finder: def };
+        }
+        const list = listFinders(args.resource);
+        return {
+          resource: args.resource ?? null,
+          count: list.length,
+          finders: list,
+          note: 'Curated unofficial finder catalog for common Fusion LOVs.',
+        };
+      }, ctx, 'hcm_describe_finder'),
   );
 
   server.registerTool(
@@ -356,12 +628,16 @@ function registerSetupTools(server: McpServer, ctx: ToolContext): void {
         async () => ({
           ...publicConfigView(ctx.config),
           pendingApprovals: ctx.approvals.listPending().length,
+          approvalBackend: ctx.approvals.backendKind,
+          approvalBackendPath: ctx.approvals.backendPath ?? null,
           toolCounts: {
             read: READ_TOOLS.size,
             write: WRITE_TOOLS.size,
             sensitive: SENSITIVE_TOOLS.size,
+            finders: FINDER_CATALOG.length,
           },
           webhookListening: Boolean(ctx.webhook),
+          atomCheckpointPath: ctx.atomCheckpoints.path ?? null,
         }),
         ctx,
         'hcm_setup_status',
@@ -1017,15 +1293,33 @@ function registerAgentUx(server: McpServer, ctx: ToolContext): void {
 function registerPlatformTools(server: McpServer, ctx: ToolContext): void {
   bindExecutor(ctx, 'hcm_start_webhook_receiver', async (args) => {
     const port = Number(args.port ?? ctx.config.webhookPort ?? 8795);
-    if (!ctx.webhook) ctx.webhook = new WebhookReceiver();
+    const secret =
+      (args.secret as string | undefined) ??
+      ctx.config.webhookSecret ??
+      process.env.ORACLE_HCM_WEBHOOK_SECRET;
+    if (!ctx.webhook) {
+      ctx.webhook = new WebhookReceiver({ secret, requireSignature: Boolean(secret) });
+    }
     const url = await ctx.webhook.start(port);
-    return { url, eventsPath: `${url}/events`, note: 'Minimal Atom/BP webhook stub.' };
+    return {
+      url,
+      eventsPath: `${url}/events`,
+      signingEnabled: ctx.webhook.signingEnabled,
+      signatureHeader: 'X-HCM-Signature: sha256=<hmac-sha256-hex>',
+      note: secret
+        ? 'HMAC verification ON — unsigned/bad signatures rejected with 401.'
+        : 'HMAC off — set ORACLE_HCM_WEBHOOK_SECRET for production-style signing.',
+    };
   });
   server.registerTool(
     'hcm_start_webhook_receiver',
     {
-      description: 'Start localhost webhook receiver stub for Atom/BP callbacks (approval unless --write).',
-      inputSchema: { port: z.number().int().positive().optional() },
+      description:
+        'Start localhost webhook receiver. When ORACLE_HCM_WEBHOOK_SECRET (or secret arg) is set, requires X-HCM-Signature HMAC-SHA256.',
+      inputSchema: {
+        port: z.number().int().positive().optional(),
+        secret: z.string().optional().describe('Override env secret for this receiver'),
+      },
       annotations: { readOnlyHint: false },
     },
     async (args) => gateWrite(ctx, 'hcm_start_webhook_receiver', args),
@@ -1041,7 +1335,10 @@ function registerPlatformTools(server: McpServer, ctx: ToolContext): void {
     async (args) =>
       runRead(async () => {
         if (!ctx.webhook) return { events: [], note: 'Webhook not started.' };
-        return { events: ctx.webhook.list(args.limit ?? 50) };
+        return {
+          events: ctx.webhook.list(args.limit ?? 50),
+          signingEnabled: ctx.webhook.signingEnabled,
+        };
       }, ctx, 'hcm_list_webhook_events'),
   );
 }

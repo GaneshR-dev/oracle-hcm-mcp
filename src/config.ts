@@ -24,6 +24,14 @@ export interface Config {
   clientSecret?: string;
   /** Approval intent TTL in ms (default 15 min) */
   approvalTtlMs: number;
+  /** memory | file | sqlite — multi-node shared pending approvals */
+  approvalStore: 'memory' | 'file' | 'sqlite';
+  /** Path for file/sqlite approval store */
+  approvalStorePath?: string;
+  /** HMAC secret for webhook receiver (ORACLE_HCM_WEBHOOK_SECRET) */
+  webhookSecret?: string;
+  /** Atom CDC checkpoint store path */
+  atomCheckpointPath?: string;
   httpPort?: number;
   grpcPort?: number;
   webhookPort?: number;
@@ -90,12 +98,25 @@ export function parseArgs(argv: string[] = process.argv.slice(2)): Config {
     clientId: process.env.ORACLE_HCM_CLIENT_ID,
     clientSecret: process.env.ORACLE_HCM_CLIENT_SECRET,
     approvalTtlMs: Number(process.env.ORACLE_HCM_APPROVAL_TTL_MS ?? 15 * 60 * 1000),
+    approvalStore: resolveApprovalStoreMode(),
+    approvalStorePath: process.env.ORACLE_HCM_APPROVAL_STORE_PATH,
+    webhookSecret: process.env.ORACLE_HCM_WEBHOOK_SECRET,
+    atomCheckpointPath: process.env.ORACLE_HCM_ATOM_CHECKPOINT_PATH,
     httpPort,
     grpcPort,
     webhookPort,
     transport,
     profile,
   };
+}
+
+function resolveApprovalStoreMode(): Config['approvalStore'] {
+  const raw = (process.env.ORACLE_HCM_APPROVAL_STORE ?? '').toLowerCase();
+  if (raw.startsWith('sqlite')) return 'sqlite';
+  if (raw.startsWith('file') || process.env.ORACLE_HCM_APPROVAL_STORE_PATH) return 'file';
+  if (raw === 'memory' || raw === 'mem') return 'memory';
+  // Default memory for interactive; set STORE_PATH for multi-node
+  return 'memory';
 }
 
 function printHelp(): void {
@@ -117,7 +138,9 @@ Env:
   ORACLE_HCM_BASE_URL, ORACLE_HCM_AUTH (basic|oauth|bearer|none),
   ORACLE_HCM_USERNAME/PASSWORD, ORACLE_HCM_TOKEN_URL, CLIENT_ID/SECRET,
   ORACLE_HCM_BEARER_TOKEN, ORACLE_HCM_WRITE=1, ORACLE_HCM_API_VERSION,
-  ORACLE_HCM_SENSITIVE=1, ORACLE_HCM_SENSITIVE_WRITE=1, ORACLE_HCM_PROFILE
+  ORACLE_HCM_SENSITIVE=1, ORACLE_HCM_SENSITIVE_WRITE=1, ORACLE_HCM_PROFILE,
+  ORACLE_HCM_APPROVAL_STORE=memory|file|sqlite, ORACLE_HCM_APPROVAL_STORE_PATH,
+  ORACLE_HCM_WEBHOOK_SECRET, ORACLE_HCM_ATOM_CHECKPOINT_PATH
 `);
 }
 
@@ -142,6 +165,10 @@ export function publicConfigView(cfg: Config): Record<string, unknown> {
     hasClientSecret: Boolean(cfg.clientSecret),
     profile: cfg.profile ?? null,
     transport: cfg.transport,
+    approvalStore: cfg.approvalStore,
+    approvalStorePath: cfg.approvalStorePath ?? null,
+    webhookSigningConfigured: Boolean(cfg.webhookSecret),
+    atomCheckpointPath: cfg.atomCheckpointPath ?? null,
     unofficial: true,
     note: 'Secrets never included. Not an Oracle product.',
   };

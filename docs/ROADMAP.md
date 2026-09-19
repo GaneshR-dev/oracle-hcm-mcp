@@ -2,35 +2,37 @@
 
 > Not an Oracle product. Priorities may change. Perfect ADF coverage is **not** a goal.
 
+## Shipped in v0.4
+
+| # | Gap | What shipped |
+|---|-----|----------------|
+| 1 | **True Fusion Atom CDC** | Feed list/get, entry parse, file checkpoint store, `hcm_atom_poll` / `hcm_atom_consume` / checkpoint tools; dummy serves Atom XML + JSON |
+| 2 | **Production webhook signing** | HMAC-SHA256 (`ORACLE_HCM_WEBHOOK_SECRET`, `X-HCM-Signature`); reject unsigned/bad sig; SECURITY.md + e2e |
+| 3 | **Multi-node approvals** | File / sqlite-backed `ApprovalStore` (`ORACLE_HCM_APPROVAL_STORE` + `_PATH`); HTTP `GET /approvals`; shared across processes |
+| 4 | **Exhaustive ADF finders** | Curated finder catalog; `hcm_lov_find` / `hcm_describe_finder`; dummy applies `finder=` params |
+| 5 | **Fuller payslip field parity** | Richer payslip (+ bank/payment/comp) Fusion-shaped fields; `ORACLE_HCM_SENSITIVE` gates unchanged |
+| 6 | **Heavier HTTP/gRPC e2e** | Vitest `transport-e2e` + `scripts/e2e-http-grpc.mjs` — health, curated tools, approval path |
+
 ## Shipped in v0.3
 
 | # | Capability | Status on dummy |
 |---|------------|-----------------|
-| 1 | Atom feeds / change detection | **Real mock** (`atomfeeds`) |
+| 1 | Atom feeds / change detection | **Real mock** (`atomfeeds`) — extended in v0.4 |
 | 2 | Recruiting requisitions + candidates | **Real mock** |
 | 3 | Benefits enrollments | **Real mock** |
 | 4 | Checklist allocate / forceClose | **Real mock** actions |
 | 5 | Nested worker assignment writes | **Real mock** nested POST + PATCH |
-| 6 | LOV finders + uniq-key helpers | **Real mock** (finder accepted) |
-| 7 | Payslip read (hard-gated) | **Real mock** + `ORACLE_HCM_SENSITIVE` |
-| 8 | Setup tools (`hcm_setup_status`, `hcm_test_connection`, `hcm_emit_mcp_config`) | **Local** (no Fusion) |
-| 9–12 | publicWorkers / contacts / phones / emails; national IDs; work relationships; positions | **Real mock** (national ID sensitive) |
-| 13–15 | Direct reports; org hierarchy; location finders | **Real mock** (simplified hierarchy) |
-| 16–18 | Absence types/plans + type balance; time card submit; schedules | **Real mock** |
-| 19–20 | Goals / performance; learning enrollments | **Real mock** |
-| 21–23 | Compensation; bank/payment; element entries / calculation cards | **Real mock** (bank/comp sensitive) |
-| 24–26 | Richer BP filters; bulk dry-run + bulk approve/deny; audit trail | **Local audit** + dummy BP |
-| 27–32 | explain_tool; dry_run_mutate; richer schemas; capability probe; RBAC hint; redaction | **Local** |
-| 33–38 | Setup UI multi-env notes; config export; rate-limit/backoff; webhook stub | **Local stubs** |
-| — | HTTP + gRPC e2e parity | Partial — stdio/vitest covered; transport smoke via existing HTTP health |
+| 6 | LOV finders + uniq-key helpers | **Real mock** — catalog expanded in v0.4 |
+| 7 | Payslip read (hard-gated) | **Real mock** + `ORACLE_HCM_SENSITIVE` — fields expanded in v0.4 |
+| 8 | Setup tools | **Local** |
+| 9–38 | Core HR extras, talent, learning, compensation, agent UX, rate-limit, webhook stub | See v0.3 commit |
 
 ## Gaps / not claimed
 
-- Full Fusion Atom CDC, true org tree APIs, IDCS-complete OAuth edge cases
-- Production webhook verification / signing
-- Multi-node approval store
-- Exhaustive ADF finder catalog per LOV
+- Full Oracle CDC product parity / every Atom collection in every pod
+- IDCS-complete OAuth edge cases
 - Perfect payslip / bank field parity with every Fusion release
+- Exhaustive ADF finder catalog for *all* LOVs (curated common set only)
 
 ## Safety invariants (keep)
 

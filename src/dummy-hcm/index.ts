@@ -7,6 +7,8 @@
 
 import express from 'express';
 import { seedStore, type Store, type ChecklistTask } from './data.js';
+import { applyFinderFilter } from '../policy/finders.js';
+import { entriesToAtomXml, parseAtomEntry } from '../platform/atomCdc.js';
 
 const API = '/hcmRestApi/resources/11.13.18.05';
 const PORT = Number(process.env.DUMMY_HCM_PORT ?? 9090);
@@ -74,10 +76,11 @@ export function createDummyApp(store?: Store): express.Express {
 
   // Workers
   app.get(`${API}/workers`, (req, res) => {
-    const items = matchQ(s.workers as unknown as Record<string, unknown>[], req.query.q as string);
+    let items = matchQ(s.workers as unknown as Record<string, unknown>[], req.query.q as string);
+    items = applyFinderFilter(items, 'workers', req.query.finder as string | undefined);
     const limit = Number(req.query.limit ?? 25);
     const offset = Number(req.query.offset ?? 0);
-    res.json(collection(items.slice(offset, offset + limit)));
+    res.json({ ...collection(items.slice(offset, offset + limit)), finder: req.query.finder ?? null });
   });
 
   app.get(`${API}/workers/:id`, (req, res) => {
@@ -151,7 +154,8 @@ export function createDummyApp(store?: Store): express.Express {
 
   // Absences
   app.get(`${API}/absences`, (req, res) => {
-    const items = matchQ(s.absences as unknown as Record<string, unknown>[], req.query.q as string);
+    let items = matchQ(s.absences as unknown as Record<string, unknown>[], req.query.q as string);
+    items = applyFinderFilter(items, 'absences', req.query.finder as string | undefined);
     res.json(collection(items));
   });
 
@@ -340,9 +344,16 @@ export function createDummyApp(store?: Store): express.Express {
   // Org LOVs
   app.get(`${API}/organizations`, (req, res) => {
     res.json(
-      collection(
-        matchQ(s.organizations as unknown as Record<string, unknown>[], req.query.q as string),
-      ),
+      {
+        ...collection(
+          applyFinderFilter(
+            matchQ(s.organizations as unknown as Record<string, unknown>[], req.query.q as string),
+            'organizations',
+            req.query.finder as string | undefined,
+          ),
+        ),
+        finder: req.query.finder ?? null,
+      },
     );
   });
   app.get(`${API}/organizations/:id`, (req, res) => {
@@ -353,7 +364,16 @@ export function createDummyApp(store?: Store): express.Express {
 
   app.get(`${API}/locations`, (req, res) => {
     res.json(
-      collection(matchQ(s.locations as unknown as Record<string, unknown>[], req.query.q as string)),
+      {
+        ...collection(
+          applyFinderFilter(
+            matchQ(s.locations as unknown as Record<string, unknown>[], req.query.q as string),
+            'locations',
+            req.query.finder as string | undefined,
+          ),
+        ),
+        finder: req.query.finder ?? null,
+      },
     );
   });
   app.get(`${API}/locations/:id`, (req, res) => {
@@ -364,7 +384,16 @@ export function createDummyApp(store?: Store): express.Express {
 
   app.get(`${API}/jobs`, (req, res) => {
     res.json(
-      collection(matchQ(s.jobs as unknown as Record<string, unknown>[], req.query.q as string)),
+      {
+        ...collection(
+          applyFinderFilter(
+            matchQ(s.jobs as unknown as Record<string, unknown>[], req.query.q as string),
+            'jobs',
+            req.query.finder as string | undefined,
+          ),
+        ),
+        finder: req.query.finder ?? null,
+      },
     );
   });
   app.get(`${API}/jobs/:id`, (req, res) => {
@@ -375,7 +404,16 @@ export function createDummyApp(store?: Store): express.Express {
 
   app.get(`${API}/grades`, (req, res) => {
     res.json(
-      collection(matchQ(s.grades as unknown as Record<string, unknown>[], req.query.q as string)),
+      {
+        ...collection(
+          applyFinderFilter(
+            matchQ(s.grades as unknown as Record<string, unknown>[], req.query.q as string),
+            'grades',
+            req.query.finder as string | undefined,
+          ),
+        ),
+        finder: req.query.finder ?? null,
+      },
     );
   });
   app.get(`${API}/grades/:id`, (req, res) => {
@@ -444,10 +482,13 @@ export function createDummyApp(store?: Store): express.Express {
   ) => {
     app.get(`${API}/${root}`, (req, res) => {
       let list = matchQ(items as unknown as Record<string, unknown>[], req.query.q as string);
-      // finder is accepted but ignored beyond echo (dummy)
+      list = applyFinderFilter(list, root, req.query.finder as string | undefined);
       const limit = Number(req.query.limit ?? 25);
       const offset = Number(req.query.offset ?? 0);
-      res.json(collection(list.slice(offset, offset + limit)));
+      res.json({
+        ...collection(list.slice(offset, offset + limit)),
+        finder: req.query.finder ?? null,
+      });
     });
     app.get(`${API}/${root}/:id`, (req, res) => {
       const o = items.find((x) => String(x[idField]) === req.params.id);
@@ -477,11 +518,47 @@ export function createDummyApp(store?: Store): express.Express {
   crud('compensationHistories', s.compensationHistories as unknown as Record<string, unknown>[], 'CompensationId');
   crud('elementEntries', s.elementEntries as unknown as Record<string, unknown>[], 'ElementEntryId');
   crud('calculationCards', s.calculationCards as unknown as Record<string, unknown>[], 'CalculationCardId');
-  crud('atomfeeds', s.atomfeeds as unknown as Record<string, unknown>[], 'EntryId');
+  // Atom feeds — JSON collection + Atom XML for CDC e2e
+  const atomList = (req: express.Request) => {
+    let list = matchQ(s.atomfeeds as unknown as Record<string, unknown>[], req.query.q as string);
+    const since = req.query.since as string | undefined;
+    if (since) {
+      const ms = Date.parse(since);
+      list = list.filter((it) => Date.parse(String(it.Updated ?? '')) >= ms);
+    }
+    return list;
+  };
+
+  app.get(`${API}/atomfeeds`, (req, res) => {
+    const list = atomList(req);
+    const limit = Number(req.query.limit ?? 25);
+    const offset = Number(req.query.offset ?? 0);
+    const wantAtom =
+      req.query.format === 'atom' ||
+      String(req.headers.accept ?? '').includes('application/atom+xml');
+    if (wantAtom) {
+      const parsed = list.map((x) => parseAtomEntry(x));
+      const xml = entriesToAtomXml('HCM Atom Feed', 'atom:all', parsed);
+      res.setHeader('Content-Type', 'application/atom+xml; charset=utf-8');
+      res.send(xml);
+      return;
+    }
+    res.json(collection(list.slice(offset, offset + limit)));
+  });
+  app.get(`${API}/atomfeeds/:id`, (req, res) => {
+    const o = s.atomfeeds.find((x) => x.EntryId === req.params.id);
+    if (!o) return res.status(404).json({ error: 'Not found' });
+    res.json(o);
+  });
   // alias
   app.get(`${API}/atomFeeds`, (req, res) => {
-    const list = matchQ(s.atomfeeds as unknown as Record<string, unknown>[], req.query.q as string);
+    const list = atomList(req);
     res.json(collection(list));
+  });
+  app.get(`${API}/atomFeeds/:id`, (req, res) => {
+    const o = s.atomfeeds.find((x) => x.EntryId === req.params.id);
+    if (!o) return res.status(404).json({ error: 'Not found' });
+    res.json(o);
   });
 
   // publicWorkers — mirror workers lightly

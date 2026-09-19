@@ -1,6 +1,6 @@
-# Tools (v0.3)
+# Tools (v0.4)
 
-Unofficial MCP tool catalog. Not an Oracle product. ~110 tools.
+Unofficial MCP tool catalog. Not an Oracle product. 110+ tools (v0.4).
 
 ## Meta / setup
 
@@ -35,11 +35,12 @@ Organizations, locations, jobs, grades search/get;
 `hcm_search_public_workers`, `hcm_get_public_worker`,
 `hcm_search_contacts`, `hcm_get_contact`, `hcm_search_phones`, `hcm_search_emails`
 
-## Recruiting / benefits / atom
+## Recruiting / benefits / atom CDC
 
 `hcm_search_requisitions`, `hcm_get_requisition`, `hcm_search_candidates`, `hcm_get_candidate`,
 `hcm_search_benefit_enrollments`, `hcm_get_benefit_enrollment`,
-`hcm_list_atom_entries`, `hcm_detect_changes`
+`hcm_list_atom_feeds`, `hcm_get_atom_feed`, `hcm_list_atom_entries`, `hcm_get_atom_entry`,
+`hcm_detect_changes`, `hcm_atom_poll`, `hcm_atom_consume`, `hcm_atom_get_checkpoint`, `hcm_atom_reset_checkpoint`
 
 ## Time / talent / learning
 
@@ -63,7 +64,7 @@ Organizations, locations, jobs, grades search/get;
 
 ## Agent UX / platform
 
-`hcm_lov_finder`, `hcm_resolve_uniq_key`,
+`hcm_lov_finder`, `hcm_lov_find`, `hcm_describe_finder`, `hcm_resolve_uniq_key`,
 `hcm_explain_tool`, `hcm_dry_run_mutate`, `hcm_probe_capabilities`, `hcm_rbac_hint`,
 `hcm_list_audit_trail`,
 `hcm_start_webhook_receiver`, `hcm_list_webhook_events`,

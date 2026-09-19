@@ -76,7 +76,12 @@ class InProcessJsonRpcBridge {
   }
 }
 
-export async function startGrpc(cfg: Config, port: number): Promise<void> {
+export type GrpcTransportHandle = {
+  port: number;
+  close: () => Promise<void>;
+};
+
+export async function startGrpc(cfg: Config, port: number): Promise<GrpcTransportHandle> {
   const protoPath = path.resolve(__dirname, '../../proto/mcp_bridge.proto');
   const packageDef = protoLoader.loadSync(protoPath, {
     keepCase: true,
@@ -129,19 +134,67 @@ export async function startGrpc(cfg: Config, port: number): Promise<void> {
     },
   });
 
-  await new Promise<void>((resolve, reject) => {
+  const boundPort = await new Promise<number>((resolve, reject) => {
     grpcServer.bindAsync(
       `127.0.0.1:${port}`,
       grpc.ServerCredentials.createInsecure(),
-      (err) => {
+      (err, portBound) => {
         if (err) reject(err);
-        else resolve();
+        else resolve(portBound);
       },
     );
   });
 
   console.error(
-    `[oracle-hcm-mcp] gRPC McpBridge listening on 127.0.0.1:${port} (writeMode=${cfg.writeMode})`,
+    `[oracle-hcm-mcp] gRPC McpBridge listening on 127.0.0.1:${boundPort} (writeMode=${cfg.writeMode})`,
   );
   console.error('[oracle-hcm-mcp] Unofficial — not affiliated with Oracle Corporation.');
+
+  return {
+    port: boundPort,
+    close: () =>
+      new Promise<void>((resolve) => {
+        grpcServer.tryShutdown(() => resolve());
+      }),
+  };
+}
+
+/** Helper for tests / scripts: unary JSON-RPC via gRPC Call */
+export async function createGrpcClient(port: number) {
+  const protoPath = path.resolve(__dirname, '../../proto/mcp_bridge.proto');
+  const packageDef = protoLoader.loadSync(protoPath, {
+    keepCase: true,
+    longs: String,
+    enums: String,
+    defaults: true,
+    oneofs: true,
+  });
+  const loaded = grpc.loadPackageDefinition(packageDef) as unknown as {
+    mcpbridge: {
+      McpBridge: new (
+        addr: string,
+        creds: grpc.ChannelCredentials,
+      ) => {
+        Call: (
+          req: { json_rpc: string },
+          cb: (err: grpc.ServiceError | null, res: { json_rpc: string }) => void,
+        ) => void;
+        close: () => void;
+      };
+    };
+  };
+  const client = new loaded.mcpbridge.McpBridge(
+    `127.0.0.1:${port}`,
+    grpc.credentials.createInsecure(),
+  );
+  return {
+    call: (msg: unknown) =>
+      new Promise<unknown>((resolve, reject) => {
+        client.Call({ json_rpc: JSON.stringify(msg) }, (err, res) => {
+          if (err) reject(err);
+          else resolve(JSON.parse(res.json_rpc));
+        });
+      }),
+    close: () => client.close(),
+  };
 }

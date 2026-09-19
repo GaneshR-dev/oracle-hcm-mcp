@@ -15,10 +15,13 @@ async function main(): Promise<void> {
 
   if (cfg.transport === 'http') {
     await startHttp(cfg, cfg.httpPort ?? 8788);
+    // Keep process alive while HTTP server listens
+    await new Promise(() => {});
     return;
   }
   if (cfg.transport === 'grpc') {
     await startGrpc(cfg, cfg.grpcPort ?? 8789);
+    await new Promise(() => {});
     return;
   }
 

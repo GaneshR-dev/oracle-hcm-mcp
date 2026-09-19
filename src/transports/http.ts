@@ -2,18 +2,22 @@
  * Streamable HTTP transport — POST /mcp
  */
 
-import { randomUUID } from 'node:crypto';
-import { createServer } from 'node:http';
+import { createServer, type Server } from 'node:http';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Config } from '../config.js';
 import { createMcpServer, createToolContext } from '../mcp/server.js';
 
-export async function startHttp(cfg: Config, port: number): Promise<void> {
+export type HttpTransportHandle = {
+  port: number;
+  url: string;
+  close: () => Promise<void>;
+};
+
+export async function startHttp(cfg: Config, port: number): Promise<HttpTransportHandle> {
   // Shared tool context so approvals persist across sessions in approval mode
   const sharedCtx = createToolContext(cfg);
 
-  const httpServer = createServer(async (req, res) => {
+  const httpServer: Server = createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', `http://${req.headers.host ?? '127.0.0.1'}`);
 
     if (req.method === 'GET' && url.pathname === '/health') {
@@ -24,6 +28,25 @@ export async function startHttp(cfg: Config, port: number): Promise<void> {
           service: 'oracle-hcm-mcp',
           unofficial: true,
           writeMode: cfg.writeMode,
+          version: '0.4.0',
+        }),
+      );
+      return;
+    }
+
+    // Optional HTTP approval helpers for multi-node / ops (same store as MCP tools)
+    if (req.method === 'GET' && url.pathname === '/approvals') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          pending: sharedCtx.approvals.listPending().map((i) => ({
+            approval_id: i.approvalId,
+            tool: i.toolName,
+            summary: i.summary,
+            expires_at: new Date(i.expiresAt).toISOString(),
+          })),
+          backend: sharedCtx.approvals.backendKind,
+          backendPath: sharedCtx.approvals.backendPath ?? null,
         }),
       );
       return;
@@ -54,10 +77,22 @@ export async function startHttp(cfg: Config, port: number): Promise<void> {
     httpServer.on('error', reject);
   });
 
+  const addr = httpServer.address();
+  const bound = typeof addr === 'object' && addr ? addr.port : port;
+
   console.error(
-    `[oracle-hcm-mcp] Streamable HTTP listening on http://127.0.0.1:${port}/mcp (writeMode=${cfg.writeMode})`,
+    `[oracle-hcm-mcp] Streamable HTTP listening on http://127.0.0.1:${bound}/mcp (writeMode=${cfg.writeMode})`,
   );
   console.error('[oracle-hcm-mcp] Unofficial — not affiliated with Oracle Corporation.');
+
+  return {
+    port: bound,
+    url: `http://127.0.0.1:${bound}/mcp`,
+    close: () =>
+      new Promise<void>((resolve, reject) => {
+        httpServer.close((err) => (err ? reject(err) : resolve()));
+      }),
+  };
 }
 
 function readJsonBody(req: import('node:http').IncomingMessage): Promise<unknown> {
@@ -76,6 +111,3 @@ function readJsonBody(req: import('node:http').IncomingMessage): Promise<unknown
     req.on('error', reject);
   });
 }
-
-// silence unused import if tree-shaken oddly
-void randomUUID;

@@ -1,6 +1,6 @@
 {
   "name": "oracle-hcm-mcp",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Unofficial Oracle Fusion Cloud HCM MCP server (stdio / Streamable HTTP / gRPC). Not affiliated with Oracle.",
   "type": "module",
   "license": "MIT",
@@ -29,8 +29,10 @@
     "dummy-hcm": "tsx src/dummy-hcm/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e-transport": "vitest run tests/transport-e2e.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "setup-ui": "node scripts/setup-ui-server.mjs"
+    "setup-ui": "node scripts/setup-ui-server.mjs",
+    "e2e:http-grpc": "node scripts/e2e-http-grpc.mjs"
   },
   "engines": {
     "node": ">=18"

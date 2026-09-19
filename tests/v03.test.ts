@@ -24,6 +24,7 @@ function cfg(overrides: Partial<Config> = {}): Config {
     username: 'demo',
     password: 'demo',
     approvalTtlMs: 60_000,
+    approvalStore: 'memory',
     transport: 'stdio',
     ...overrides,
   };
