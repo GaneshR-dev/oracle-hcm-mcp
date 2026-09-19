@@ -54,7 +54,11 @@
           <span>ORACLE_HCM_API_VERSION</span>
           <input id="apiVersion" type="text" value="11.13.18.05" autocomplete="off" spellcheck="false" />
         </label>
-        <p class="hint">Resources path becomes <code>{base}/resources/{version}/…</code></p>
+        <label class="field">
+          <span>ORACLE_HCM_PROFILE (optional multi-env label)</span>
+          <input id="profile" type="text" placeholder="sandbox | prod-readonly" autocomplete="off" />
+        </label>
+        <p class="hint">Resources path becomes <code>{base}/resources/{version}/…</code>. Profiles are labels for your own mcp.json copies.</p>
       </section>
 
       <!-- 2 auth -->

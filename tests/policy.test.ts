@@ -48,6 +48,9 @@ describe('allowlist', () => {
     expect(isAllowlistedPath('allocatedChecklists/C1/child/allocatedTasks/T1')).toBe(true);
     expect(isAllowlistedPath('organizations')).toBe(true);
     expect(isAllowlistedPath('locations')).toBe(true);
+    expect(isAllowlistedPath('recruitingJobRequisitions')).toBe(true);
+    expect(isAllowlistedPath('payslips')).toBe(true);
+    expect(isAllowlistedPath('atomfeeds')).toBe(true);
     expect(isAllowlistedPath('jobs')).toBe(true);
     expect(isAllowlistedPath('grades')).toBe(true);
     expect(isAllowlistedPath('timeRecords')).toBe(true);

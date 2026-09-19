@@ -22,3 +22,12 @@
 ## Blocklist
 
 Paths matching CE, generative AI, Oracle-internal, embedding/LLM-style segments are rejected by `policy/allowlist.ts` before the HTTP call.
+
+## Sensitive tools (v0.3)
+
+Payslip, bank account, national identifier, and compensation tools require:
+
+1. `ORACLE_HCM_SENSITIVE=1`
+2. Human approval via `hcm_approve_write` **even when** `--write` is set, unless `ORACLE_HCM_SENSITIVE_WRITE=1` is also set.
+
+Tool results pass through redaction middleware (secrets stripped; some ID fields masked).

@@ -7,6 +7,7 @@
 import type { Config } from '../config.js';
 import { resourcesBase } from '../config.js';
 import { assertAllowlisted, normalizeResourcePath } from '../policy/allowlist.js';
+import { RateLimiter, withBackoff } from '../platform/rateLimit.js';
 
 export class HcmHttpError extends Error {
   constructor(
@@ -28,6 +29,7 @@ export interface ListResult<T = unknown> {
 
 export class HcmClient {
   private cachedToken?: { value: string; expiresAt: number };
+  private limiter = new RateLimiter();
 
   constructor(private cfg: Config) {}
 
@@ -155,12 +157,18 @@ export class HcmClient {
   }
 
   private async rawFetch(url: string, init: RequestInit): Promise<Response> {
-    const headers = new Headers(init.headers);
-    headers.set('Accept', 'application/json');
-    const auth = await this.authorizationHeader();
-    if (auth) headers.set('Authorization', auth);
-    const res = await fetch(url, { ...init, headers });
-    return res;
+    await this.limiter.take();
+    return withBackoff(async () => {
+      const headers = new Headers(init.headers);
+      headers.set('Accept', 'application/json');
+      const auth = await this.authorizationHeader();
+      if (auth) headers.set('Authorization', auth);
+      const res = await fetch(url, { ...init, headers });
+      if (res.status === 429 || res.status >= 500) {
+        throw Object.assign(new Error(`HCM HTTP ${res.status}`), { status: res.status });
+      }
+      return res;
+    });
   }
 
   private async authorizationHeader(): Promise<string | undefined> {

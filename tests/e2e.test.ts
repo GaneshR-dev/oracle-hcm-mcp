@@ -18,6 +18,8 @@ function testConfig(overrides: Partial<Config> = {}): Config {
     baseUrl,
     apiVersion: '11.13.18.05',
     writeMode: false,
+    sensitiveEnabled: false,
+    sensitiveWriteEnabled: false,
     authMode: 'basic',
     username: 'demo',
     password: 'demo',
@@ -157,9 +159,9 @@ describe('MCP E2E --write mode', () => {
     await withMcpClient(testConfig({ writeMode: true }), async (client) => {
       const tools = await client.listTools();
       const names = tools.tools.map((t) => t.name);
-      expect(names).not.toContain('hcm_approve_write');
-      expect(names).not.toContain('hcm_deny_write');
-      expect(names).not.toContain('hcm_list_pending_approvals');
+      // v0.3: approval tools remain registered so sensitive tools can still gate under --write
+      expect(names).toContain('hcm_approve_write');
+      expect(names).toContain('hcm_deny_write');
 
       const created = parseTool(
         await client.callTool({

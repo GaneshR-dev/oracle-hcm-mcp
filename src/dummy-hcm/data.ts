@@ -8,6 +8,7 @@ export type Worker = {
   LastName: string;
   emails?: { EmailAddress: string }[];
   workRelationships?: WorkRelationship[];
+  ManagerPersonNumber?: string;
 };
 
 export type WorkRelationship = {
@@ -81,6 +82,7 @@ export type Organization = {
   OrganizationCode: string;
   Name: string;
   Status: string;
+  ParentOrganizationId?: string;
 };
 
 export type Location = {
@@ -119,6 +121,30 @@ export type TalentProfile = {
   ProfileType: string;
   Summary?: string;
 };
+
+
+export type Requisition = { RequisitionId: string; RequisitionNumber: string; Title: string; Status: string };
+export type Candidate = { CandidateId: string; DisplayName: string; Email?: string; Status: string };
+export type BenefitEnrollment = { EnrollmentId: string; PersonNumber: string; PlanName: string; Status: string };
+export type Position = { PositionId: string; PositionCode: string; Name: string; Status: string };
+export type Contact = { ContactId: string; PersonNumber: string; ContactName: string; Relationship: string };
+export type Phone = { PhoneId: string; PersonNumber: string; PhoneNumber: string; PhoneType: string };
+export type EmailRow = { EmailId: string; PersonNumber: string; EmailAddress: string; EmailType: string };
+export type NationalId = { NationalIdentifierId: string; PersonNumber: string; NationalIdentifierNumber: string; LegislationCode: string };
+export type AbsenceType = { AbsenceTypeId: string; Name: string; Status: string };
+export type AbsencePlan = { AbsencePlanId: string; PlanName: string; Status: string };
+export type TimeCard = { TimeCardId: string; PersonNumber: string; Status: string; PeriodStart: string; PeriodEnd: string };
+export type WorkSchedule = { ScheduleId: string; ScheduleName: string; PersonNumber?: string };
+export type Goal = { GoalId: string; PersonNumber: string; GoalName: string; Status: string };
+export type PerfDoc = { DocumentId: string; PersonNumber: string; DocumentName: string; Status: string };
+export type LearningEnrollment = { EnrollmentId: string; PersonNumber: string; CourseName: string; Status: string };
+export type Payslip = { PayslipId: string; PersonNumber: string; Period: string; NetPay: number };
+export type BankAccount = { BankAccountId: string; PersonNumber: string; BankAccountNumber: string; BankName: string };
+export type PaymentMethod = { PaymentMethodId: string; PersonNumber: string; MethodType: string; Status: string };
+export type Compensation = { CompensationId: string; PersonNumber: string; Amount: number; Currency: string; EffectiveDate: string };
+export type ElementEntry = { ElementEntryId: string; PersonNumber: string; ElementName: string; Amount: number };
+export type CalculationCard = { CalculationCardId: string; PersonNumber: string; CardType: string; Status: string };
+export type AtomEntry = { EntryId: string; Collection: string; Updated: string; Title: string; ChangeType: string };
 
 export type PayrollRelationship = {
   PayrollRelationshipId: string;
@@ -161,6 +187,7 @@ export function seedStore() {
       FirstName: 'Ada',
       LastName: 'Lovelace',
       emails: [{ EmailAddress: 'ada@example.com' }],
+      ManagerPersonNumber: undefined,
       workRelationships: [
         {
           PeriodOfServiceId: 'WR1',
@@ -176,6 +203,7 @@ export function seedStore() {
       FirstName: 'Alan',
       LastName: 'Turing',
       emails: [{ EmailAddress: 'alan@example.com' }],
+      ManagerPersonNumber: 'P1001',
       workRelationships: [
         {
           PeriodOfServiceId: 'WR2',
@@ -254,7 +282,7 @@ export function seedStore() {
 
   const organizations: Organization[] = [
     { OrganizationId: 'O1', OrganizationCode: 'ENG', Name: 'Engineering', Status: 'A' },
-    { OrganizationId: 'O2', OrganizationCode: 'HR', Name: 'Human Resources', Status: 'A' },
+    { OrganizationId: 'O2', OrganizationCode: 'HR', Name: 'Human Resources', Status: 'A', ParentOrganizationId: 'O1' },
   ];
 
   const locations: Location[] = [
@@ -312,6 +340,75 @@ export function seedStore() {
   let seq = 2000;
   const nextId = (prefix: string) => `${prefix}${++seq}`;
 
+  const requisitions: Requisition[] = [
+    { RequisitionId: 'REQ1', RequisitionNumber: 'R-100', Title: 'Software Engineer', Status: 'OPEN' },
+  ];
+  const candidates: Candidate[] = [
+    { CandidateId: 'CAN1', DisplayName: 'Grace Hopper', Email: 'grace@example.com', Status: 'ACTIVE' },
+  ];
+  const benefitEnrollments: BenefitEnrollment[] = [
+    { EnrollmentId: 'BE1', PersonNumber: 'P1001', PlanName: 'Medical PPO', Status: 'ENROLLED' },
+  ];
+  const positions: Position[] = [
+    { PositionId: 'POS1', PositionCode: 'SWE-IC3', Name: 'SWE IC3', Status: 'A' },
+  ];
+  const contacts: Contact[] = [
+    { ContactId: 'CT1', PersonNumber: 'P1001', ContactName: 'Emergency Contact', Relationship: 'Spouse' },
+  ];
+  const phones: Phone[] = [
+    { PhoneId: 'PH1', PersonNumber: 'P1001', PhoneNumber: '+1-555-0100', PhoneType: 'WORK' },
+  ];
+  const workerEmails: EmailRow[] = [
+    { EmailId: 'EM1', PersonNumber: 'P1001', EmailAddress: 'ada@example.com', EmailType: 'WORK' },
+  ];
+  const nationalIdentifiers: NationalId[] = [
+    { NationalIdentifierId: 'NI1', PersonNumber: 'P1001', NationalIdentifierNumber: '123-45-6789', LegislationCode: 'US' },
+  ];
+  const absenceTypes: AbsenceType[] = [
+    { AbsenceTypeId: 'AT1', Name: 'Vacation', Status: 'A' },
+    { AbsenceTypeId: 'AT2', Name: 'Sick', Status: 'A' },
+  ];
+  const absencePlans: AbsencePlan[] = [
+    { AbsencePlanId: 'AP1', PlanName: 'Annual Leave', Status: 'A' },
+  ];
+  const timeCards: TimeCard[] = [
+    { TimeCardId: 'TC1', PersonNumber: 'P1001', Status: 'DRAFT', PeriodStart: '2026-09-14', PeriodEnd: '2026-09-20' },
+  ];
+  const workSchedules: WorkSchedule[] = [
+    { ScheduleId: 'WS1', ScheduleName: 'Standard 9-5', PersonNumber: 'P1001' },
+  ];
+  const goals: Goal[] = [
+    { GoalId: 'G1', PersonNumber: 'P1001', GoalName: 'Ship MCP v0.3', Status: 'IN_PROGRESS' },
+  ];
+  const performanceDocuments: PerfDoc[] = [
+    { DocumentId: 'PD1', PersonNumber: 'P1001', DocumentName: '2026 Annual Review', Status: 'OPEN' },
+  ];
+  const learningEnrollments: LearningEnrollment[] = [
+    { EnrollmentId: 'LE1', PersonNumber: 'P1002', CourseName: 'Fusion HCM Basics', Status: 'ENROLLED' },
+  ];
+  const payslips: Payslip[] = [
+    { PayslipId: 'PS1', PersonNumber: 'P1001', Period: '2026-08', NetPay: 8500 },
+  ];
+  const bankAccounts: BankAccount[] = [
+    { BankAccountId: 'BA1', PersonNumber: 'P1001', BankAccountNumber: '000123456789', BankName: 'Example Bank' },
+  ];
+  const paymentMethods: PaymentMethod[] = [
+    { PaymentMethodId: 'PM1', PersonNumber: 'P1001', MethodType: 'DIRECT_DEPOSIT', Status: 'A' },
+  ];
+  const compensationHistories: Compensation[] = [
+    { CompensationId: 'CH1', PersonNumber: 'P1001', Amount: 120000, Currency: 'USD', EffectiveDate: '2026-01-01' },
+  ];
+  const elementEntries: ElementEntry[] = [
+    { ElementEntryId: 'EE1', PersonNumber: 'P1001', ElementName: 'Regular Salary', Amount: 10000 },
+  ];
+  const calculationCards: CalculationCard[] = [
+    { CalculationCardId: 'CC1', PersonNumber: 'P1001', CardType: 'Tax', Status: 'A' },
+  ];
+  const atomfeeds: AtomEntry[] = [
+    { EntryId: 'AE1', Collection: 'workers', Updated: '2026-09-18T10:00:00Z', Title: 'Worker 1001 updated', ChangeType: 'UPDATE' },
+    { EntryId: 'AE2', Collection: 'absences', Updated: '2026-09-19T08:00:00Z', Title: 'Absence A1 created', ChangeType: 'CREATE' },
+  ];
+
   return {
     workers,
     workerAssignments,
@@ -327,6 +424,28 @@ export function seedStore() {
     timeRecords,
     talentProfiles,
     payrollRelationships,
+    requisitions,
+    candidates,
+    benefitEnrollments,
+    positions,
+    contacts,
+    phones,
+    workerEmails,
+    nationalIdentifiers,
+    absenceTypes,
+    absencePlans,
+    timeCards,
+    workSchedules,
+    goals,
+    performanceDocuments,
+    learningEnrollments,
+    payslips,
+    bankAccounts,
+    paymentMethods,
+    compensationHistories,
+    elementEntries,
+    calculationCards,
+    atomfeeds,
     nextId,
   };
 }

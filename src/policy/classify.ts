@@ -39,6 +39,61 @@ const READ_TOOLS = new Set([
   'hcm_get_payroll_relationship',
   'hcm_rest_get',
   'hcm_list_pending_approvals',
+  'hcm_list_atom_entries',
+  'hcm_detect_changes',
+  'hcm_search_requisitions',
+  'hcm_get_requisition',
+  'hcm_search_candidates',
+  'hcm_get_candidate',
+  'hcm_search_benefit_enrollments',
+  'hcm_get_benefit_enrollment',
+  'hcm_lov_finder',
+  'hcm_resolve_uniq_key',
+  'hcm_setup_status',
+  'hcm_test_connection',
+  'hcm_emit_mcp_config',
+  'hcm_search_public_workers',
+  'hcm_get_public_worker',
+  'hcm_search_contacts',
+  'hcm_get_contact',
+  'hcm_search_phones',
+  'hcm_search_emails',
+  'hcm_search_national_identifiers',
+  'hcm_get_national_identifier',
+  'hcm_get_work_relationship',
+  'hcm_search_positions',
+  'hcm_get_position',
+  'hcm_list_direct_reports',
+  'hcm_get_org_hierarchy',
+  'hcm_find_locations',
+  'hcm_search_absence_types',
+  'hcm_search_absence_plans',
+  'hcm_get_absence_type_balance',
+  'hcm_search_schedules',
+  'hcm_get_schedule',
+  'hcm_search_goals',
+  'hcm_get_goal',
+  'hcm_search_performance_documents',
+  'hcm_get_performance_document',
+  'hcm_search_learning_enrollments',
+  'hcm_get_learning_enrollment',
+  'hcm_search_compensation',
+  'hcm_get_compensation',
+  'hcm_search_bank_accounts',
+  'hcm_get_bank_account',
+  'hcm_search_payment_methods',
+  'hcm_search_element_entries',
+  'hcm_search_calculation_cards',
+  'hcm_search_payslips',
+  'hcm_get_payslip',
+  'hcm_list_audit_trail',
+  'hcm_bulk_bp_dry_run',
+  'hcm_explain_tool',
+  'hcm_dry_run_mutate',
+  'hcm_probe_capabilities',
+  'hcm_rbac_hint',
+  'hcm_list_webhook_events',
+  'hcm_export_config',
 ]);
 
 const WRITE_TOOLS = new Set([
@@ -56,13 +111,20 @@ const WRITE_TOOLS = new Set([
   'hcm_rest_mutate',
   'hcm_approve_write',
   'hcm_deny_write',
+  'hcm_allocate_checklist',
+  'hcm_force_close_checklist',
+  'hcm_create_worker_assignment',
+  'hcm_update_worker_assignment',
+  'hcm_submit_time_card',
+  'hcm_bulk_approve_notifications',
+  'hcm_bulk_deny_notifications',
+  'hcm_start_webhook_receiver',
 ]);
 
 export function classifyTool(name: string): OpClass {
   if (READ_TOOLS.has(name)) return 'read';
   if (WRITE_TOOLS.has(name)) return 'write';
-  // Unknown / future tools: treat as write
-  if (name.startsWith('hcm_') && /create|update|delete|mutate|perform|patch|post|put/i.test(name)) {
+  if (name.startsWith('hcm_') && /create|update|delete|mutate|perform|patch|post|put|submit|allocate|force|approve|deny/i.test(name)) {
     return 'write';
   }
   if (name.startsWith('hcm_')) return 'write';
@@ -76,3 +138,5 @@ export function isReadTool(name: string): boolean {
 export function isWriteTool(name: string): boolean {
   return classifyTool(name) === 'write';
 }
+
+export { READ_TOOLS, WRITE_TOOLS };

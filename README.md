@@ -10,10 +10,10 @@ Unofficial Model Context Protocol (MCP) server for **Oracle Fusion Cloud HCM** R
 
 ## Status
 
-v0.2 — curated tools aligned to Fusion path names (`planBalances`, `businessProcessNotifications`,
-`allocatedTasks`, org LOVs, time records, talent profiles, payroll relationships read-only).
-Perfect ADF coverage is **not** a goal. MCP tool names such as `hcm_absence_balance` stay stable;
-internals use Fusion REST paths.
+v0.3 — expands curated domains (recruiting, benefits, atom/change, deeper checklists/assignments,
+manager/org helpers, time/absence LOVs, talent/learning, gated payslip/bank/national-ID, agent UX,
+setup tools, rate-limit/backoff, webhook stub). **~110 tools**. Perfect ADF coverage is **not** a goal.
+See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ### Honest coverage
 
@@ -36,7 +36,7 @@ internals use Fusion REST paths.
 | Mode | Behavior |
 |------|----------|
 | **Default** | Mutating tools return `pending_approval` with an `approval_id`. A human (or trusted client) must call `hcm_approve_write` or `hcm_deny_write`. Approval tools are registered. |
-| **`--write`** / `ORACLE_HCM_WRITE=1` | Mutations run **immediately**. Approval tools are **not** registered. Use only for trusted automation against non-production or carefully controlled environments. |
+| **`--write`** / `ORACLE_HCM_WRITE=1` | Mutations run **immediately**. Approval tools remain registered so **sensitive** tools can still require approval unless `ORACLE_HCM_SENSITIVE_WRITE=1`. Use only for trusted automation against non-production or carefully controlled environments. |
 
 Unknown / future `hcm_*` tools are classified as **write** (safe default).
 
@@ -113,12 +113,15 @@ oracle-hcm-mcp --base-url http://127.0.0.1:9090/hcmRestApi
 | `ORACLE_HCM_TOKEN_URL` / `CLIENT_ID` / `CLIENT_SECRET` | OAuth client-credentials (IDCS) |
 | `ORACLE_HCM_WRITE=1` | Same as `--write` |
 | `ORACLE_HCM_APPROVAL_TTL_MS` | Pending intent TTL (default 15 min) |
+| `ORACLE_HCM_SENSITIVE=1` | Enable payslip / bank / national-ID tools |
+| `ORACLE_HCM_SENSITIVE_WRITE=1` | Allow sensitive tools to skip approval when combined with `--write` |
+| `ORACLE_HCM_PROFILE` | Optional multi-env profile label |
 
 Auth note: credentials open the HTTP door; **HCM RBAC** still decides what the user/app can do.
 
-## Tools (v0.2)
+## Tools (v0.3)
 
-**Meta:** `hcm_health`, `hcm_whoami`, `hcm_list_resources`, `hcm_describe_resource`
+**Meta / setup:** `hcm_health`, `hcm_whoami`, `hcm_list_resources`, `hcm_describe_resource`, `hcm_setup_status`, `hcm_test_connection`, `hcm_emit_mcp_config`, `hcm_export_config`
 
 **Workers:** `hcm_search_workers`, `hcm_get_worker`, `hcm_get_worker_assignments`, `hcm_create_worker`, `hcm_update_worker`
 

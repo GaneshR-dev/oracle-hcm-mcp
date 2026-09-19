@@ -53,6 +53,14 @@ function findTask(c: { allocatedTasks: ChecklistTask[]; tasks?: ChecklistTask[] 
   );
 }
 
+
+function bodyNum(body: unknown): string {
+  if (body && typeof body === 'object' && 'AssignmentNumber' in body) {
+    return String((body as { AssignmentNumber?: string }).AssignmentNumber ?? 'E-NEW');
+  }
+  return 'E-NEW';
+}
+
 export function createDummyApp(store?: Store): express.Express {
   const s = store ?? seedStore();
   const app = express();
@@ -426,6 +434,133 @@ export function createDummyApp(store?: Store): express.Express {
     if (!o) return res.status(404).json({ error: 'Not found' });
     res.json(o);
   });
+
+
+  // --- v0.3 resources ---
+  const crud = <T extends Record<string, unknown>>(
+    root: string,
+    items: T[],
+    idField: string,
+  ) => {
+    app.get(`${API}/${root}`, (req, res) => {
+      let list = matchQ(items as unknown as Record<string, unknown>[], req.query.q as string);
+      // finder is accepted but ignored beyond echo (dummy)
+      const limit = Number(req.query.limit ?? 25);
+      const offset = Number(req.query.offset ?? 0);
+      res.json(collection(list.slice(offset, offset + limit)));
+    });
+    app.get(`${API}/${root}/:id`, (req, res) => {
+      const o = items.find((x) => String(x[idField]) === req.params.id);
+      if (!o) return res.status(404).json({ error: 'Not found' });
+      res.json(o);
+    });
+  };
+
+  crud('recruitingJobRequisitions', s.requisitions as unknown as Record<string, unknown>[], 'RequisitionId');
+  crud('recruitingCandidates', s.candidates as unknown as Record<string, unknown>[], 'CandidateId');
+  crud('benefitEnrollments', s.benefitEnrollments as unknown as Record<string, unknown>[], 'EnrollmentId');
+  crud('positions', s.positions as unknown as Record<string, unknown>[], 'PositionId');
+  crud('hcmContacts', s.contacts as unknown as Record<string, unknown>[], 'ContactId');
+  crud('workerPhones', s.phones as unknown as Record<string, unknown>[], 'PhoneId');
+  crud('workerEmails', s.workerEmails as unknown as Record<string, unknown>[], 'EmailId');
+  crud('nationalIdentifiers', s.nationalIdentifiers as unknown as Record<string, unknown>[], 'NationalIdentifierId');
+  crud('absenceTypes', s.absenceTypes as unknown as Record<string, unknown>[], 'AbsenceTypeId');
+  crud('absencePlans', s.absencePlans as unknown as Record<string, unknown>[], 'AbsencePlanId');
+  crud('timeCards', s.timeCards as unknown as Record<string, unknown>[], 'TimeCardId');
+  crud('workSchedules', s.workSchedules as unknown as Record<string, unknown>[], 'ScheduleId');
+  crud('goals', s.goals as unknown as Record<string, unknown>[], 'GoalId');
+  crud('performanceDocuments', s.performanceDocuments as unknown as Record<string, unknown>[], 'DocumentId');
+  crud('learningEnrollments', s.learningEnrollments as unknown as Record<string, unknown>[], 'EnrollmentId');
+  crud('payslips', s.payslips as unknown as Record<string, unknown>[], 'PayslipId');
+  crud('bankAccounts', s.bankAccounts as unknown as Record<string, unknown>[], 'BankAccountId');
+  crud('personalPaymentMethods', s.paymentMethods as unknown as Record<string, unknown>[], 'PaymentMethodId');
+  crud('compensationHistories', s.compensationHistories as unknown as Record<string, unknown>[], 'CompensationId');
+  crud('elementEntries', s.elementEntries as unknown as Record<string, unknown>[], 'ElementEntryId');
+  crud('calculationCards', s.calculationCards as unknown as Record<string, unknown>[], 'CalculationCardId');
+  crud('atomfeeds', s.atomfeeds as unknown as Record<string, unknown>[], 'EntryId');
+  // alias
+  app.get(`${API}/atomFeeds`, (req, res) => {
+    const list = matchQ(s.atomfeeds as unknown as Record<string, unknown>[], req.query.q as string);
+    res.json(collection(list));
+  });
+
+  // publicWorkers — mirror workers lightly
+  app.get(`${API}/publicWorkers`, (req, res) => {
+    const items = s.workers.map((w) => ({
+      PublicWorkerId: w.WorkerId,
+      PersonNumber: w.PersonNumber,
+      DisplayName: w.DisplayName,
+    }));
+    res.json(collection(matchQ(items as unknown as Record<string, unknown>[], req.query.q as string)));
+  });
+  app.get(`${API}/publicWorkers/:id`, (req, res) => {
+    const w = s.workers.find((x) => x.WorkerId === req.params.id);
+    if (!w) return res.status(404).json({ error: 'Not found' });
+    res.json({ PublicWorkerId: w.WorkerId, PersonNumber: w.PersonNumber, DisplayName: w.DisplayName });
+  });
+
+  // Checklist allocate / forceClose
+  app.post(`${API}/allocatedChecklists/action/allocateChecklist`, (req, res) => {
+    const id = s.nextId('C');
+    const body = req.body ?? {};
+    const row = {
+      AllocatedChecklistId: id,
+      ChecklistName: body.ChecklistName ?? 'Allocated',
+      PersonNumber: body.PersonNumber ?? 'P1001',
+      allocatedTasks: [],
+      tasks: [],
+    };
+    s.checklists.push(row);
+    res.status(201).json(row);
+  });
+  app.post(`${API}/allocatedChecklists/:id/action/forceClose`, (req, res) => {
+    const c = s.checklists.find((x) => x.AllocatedChecklistId === req.params.id);
+    if (!c) return res.status(404).json({ error: 'Not found' });
+    for (const t of c.allocatedTasks) t.status = 'CLOSED';
+    res.json({ ...c, Status: 'CLOSED', forceClosed: true });
+  });
+
+  // Nested assignment create
+  app.post(
+    `${API}/workers/:wid/child/workRelationships/:wrid/child/assignments`,
+    (req, res) => {
+      const w = s.workers.find((x) => x.WorkerId === req.params.wid);
+      if (!w) return res.status(404).json({ error: 'Worker not found' });
+      const wr = w.workRelationships?.find((x) => x.PeriodOfServiceId === req.params.wrid);
+      if (!wr) return res.status(404).json({ error: 'Work relationship not found' });
+      const id = s.nextId('AS');
+      const asg = {
+        AssignmentId: id,
+        AssignmentNumber: bodyNum(req.body),
+        WorkerId: w.WorkerId,
+        ...(req.body ?? {}),
+      };
+      wr.assignments.push(asg);
+      s.workerAssignments.push(asg);
+      res.status(201).json(asg);
+    },
+  );
+  app.patch(`${API}/workerAssignments/:id`, (req, res) => {
+    const a = s.workerAssignments.find((x) => x.AssignmentId === req.params.id);
+    if (!a) return res.status(404).json({ error: 'Not found' });
+    Object.assign(a, req.body);
+    res.json(a);
+  });
+
+  // Time card submit
+  app.post(`${API}/timeCards/action/submit`, (req, res) => {
+    const id = s.nextId('TC');
+    const row = {
+      TimeCardId: id,
+      PersonNumber: req.body?.PersonNumber ?? 'P1001',
+      Status: 'SUBMITTED',
+      PeriodStart: req.body?.PeriodStart ?? '2026-09-14',
+      PeriodEnd: req.body?.PeriodEnd ?? '2026-09-20',
+    };
+    s.timeCards.push(row);
+    res.status(201).json(row);
+  });
+
 
   // Blocklist demo
   app.all(`${API}/ce/*path`, (_req, res) => {

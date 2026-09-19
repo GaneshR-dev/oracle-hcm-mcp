@@ -25,32 +25,55 @@ const ALLOWED_ROOTS = [
   'workers',
   'absences',
   'planBalances',
-  'absencesBalances', // legacy alias → planBalances
+  'absencesBalances',
   'areasOfResponsibility',
   'allocatedChecklists',
-  // Business process notifications (legacy workflowNotifications aliased)
   'businessProcessNotifications',
   'workflowNotifications',
-  // Assignments / public
   'workerAssignments',
   'emps',
   'publicWorkers',
   'hcmContacts',
-  // Org LOVs (P1)
+  'workerEmails',
+  'workerPhones',
+  'nationalIdentifiers',
+  'positions',
+  // Org LOVs
   'organizations',
   'locations',
   'jobs',
   'grades',
-  // Time / talent / payroll (P1)
+  // Time / talent / payroll
   'timeRecords',
+  'timeCards',
+  'workSchedules',
   'talentPersonProfiles',
+  'goals',
+  'performanceDocuments',
+  'learningEnrollments',
   'payrollRelationships',
+  'payslips',
+  'bankAccounts',
+  'personalPaymentMethods',
+  'salaryBases',
+  'elementEntries',
+  'calculationCards',
+  'compensationHistories',
+  // Recruiting / benefits
+  'recruitingJobRequisitions',
+  'recruitingCandidates',
+  'benefitEnrollments',
+  // Absence LOVs
+  'absenceTypes',
+  'absencePlans',
+  // Atom / change
+  'atomfeeds',
+  'atomFeeds',
 ];
 
 export function normalizeResourcePath(path: string): string {
   let p = path.trim();
   if (p.startsWith('/')) p = p.slice(1);
-  // strip leading resources/version if present
   p = p.replace(/^resources\/[^/]+\//i, '');
   p = p.replace(/^hcmRestApi\//i, '');
   return p;

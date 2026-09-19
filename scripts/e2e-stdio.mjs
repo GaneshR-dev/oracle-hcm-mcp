@@ -91,7 +91,7 @@ async function runApprovalMode() {
     record(
       section,
       'listTools — approval tools present, curated suite',
-      hasApproval && names.length >= 40 && names.length <= 60,
+      hasApproval && names.length >= 100,
       `count=${names.length}; approval=${hasApproval}; tools=${names.join(',')}`,
     );
 
@@ -419,12 +419,12 @@ async function runWriteMode() {
   await withClient(['dist/index.js', '--write'], async (client) => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name);
-    const absent = APPROVAL_TOOLS.every((n) => !names.includes(n));
+    const present = APPROVAL_TOOLS.every((n) => names.includes(n));
     record(
       section,
-      'listTools — approval tools ABSENT',
-      absent,
-      `count=${names.length}; hasApprovalTools=${!absent}`,
+      'listTools — approval tools PRESENT (v0.3 sensitive gate)',
+      present && names.length >= 100,
+      `count=${names.length}; hasApprovalTools=${present}`,
     );
 
     const noPending = (data) => data?.pending_approval !== true;
@@ -628,17 +628,37 @@ function writeReport() {
   }
   lines.push('', '## Notes', '');
   lines.push(
-    '- Approval tools (`hcm_list_pending_approvals`, `hcm_approve_write`, `hcm_deny_write`) are registered only when not in `--write` mode.',
+    '- Approval tools remain registered in `--write` mode (v0.3) so sensitive tools can still require approval unless `ORACLE_HCM_SENSITIVE_WRITE=1`.',
   );
   lines.push(
     '- `hcm_rest_mutate` to CE/generative-AI style paths is rejected by allowlist/blocklist before pending approval or execution.',
   );
-  lines.push('- Dummy HCM covers Fusion paths: planBalances, businessProcessNotifications, allocatedTasks, org LOVs, timeRecords, talentPersonProfiles, payrollRelationships.', '');
+  lines.push('- Dummy HCM covers v0.3 paths including atomfeeds, recruiting, benefits, payslips (gated), checklists allocate/forceClose, nested assignments, etc.', '');
 
   fs.writeFileSync(REPORT_PATH, lines.join('\n'));
   console.log(`\nWrote ${REPORT_PATH}`);
   console.log(`\nSUMMARY: ${passed} passed, ${failed} failed — ${verdict}`);
   return failed === 0;
+}
+
+
+async function runV03Smoke() {
+  const section = 'C) v0.3 smoke (approval mode)';
+  console.log(`\n=== ${section} ===`);
+  await withClient(['dist/index.js'], async (client) => {
+    const { tools } = await client.listTools();
+    record(section, 'tool count >= 100', tools.length >= 100, `count=${tools.length}`);
+    const setup = await call(client, 'hcm_setup_status', {});
+    record(section, 'hcm_setup_status', !setup.isError && setup.data?.unofficial === true, JSON.stringify(setup.data).slice(0, 200));
+    const atom = await call(client, 'hcm_list_atom_entries', {});
+    record(section, 'hcm_list_atom_entries', !atom.isError && (atom.data?.items?.length ?? 0) > 0, JSON.stringify(atom.data).slice(0, 200));
+    const req = await call(client, 'hcm_search_requisitions', {});
+    record(section, 'hcm_search_requisitions', !req.isError && req.data?.items?.[0]?.RequisitionId, JSON.stringify(req.data).slice(0, 200));
+    const sens = await call(client, 'hcm_get_payslip', { payslipId: 'PS1' });
+    record(section, 'hcm_get_payslip gated without SENSITIVE', sens.isError || String(sens.data?.error ?? '').includes('SENSITIVE'), JSON.stringify(sens.data).slice(0, 200));
+    const dry = await call(client, 'hcm_dry_run_mutate', { method: 'POST', path: 'absences', body: { x: 1 } });
+    record(section, 'hcm_dry_run_mutate', !dry.isError && dry.data?.ok === true, JSON.stringify(dry.data).slice(0, 200));
+  });
 }
 
 async function main() {
@@ -653,6 +673,7 @@ async function main() {
 
   await runApprovalMode();
   await runWriteMode();
+  await runV03Smoke();
   const ok = writeReport();
   process.exit(ok ? 0 : 1);
 }

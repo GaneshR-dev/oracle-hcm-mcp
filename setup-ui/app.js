@@ -47,6 +47,7 @@
       clientId: ($('clientId').value || '').trim(),
       clientSecret: $('clientSecret').value,
       writeMode: selected('writeMode') === 'write',
+      profile: ($('profile')?.value || '').trim(),
     };
   }
 
@@ -94,6 +95,7 @@
       ORACLE_HCM_API_VERSION: s.apiVersion,
       ORACLE_HCM_AUTH: s.authMode,
     };
+    if (s.profile) env.ORACLE_HCM_PROFILE = s.profile;
     if (s.authMode === 'basic') {
       env.ORACLE_HCM_USERNAME = s.username;
       env.ORACLE_HCM_PASSWORD = s.password;
