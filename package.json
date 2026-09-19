@@ -1,6 +1,6 @@
 {
   "name": "oracle-hcm-mcp",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Unofficial Oracle Fusion Cloud HCM MCP server (stdio / Streamable HTTP / gRPC). Not affiliated with Oracle.",
   "type": "module",
   "license": "MIT",
@@ -20,7 +20,9 @@
     "README.md",
     "LICENSE",
     "setup-ui",
-    "scripts/setup-ui-server.mjs"
+    "scripts/setup-ui-server.mjs",
+    "approval-ui",
+    "profiles"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -32,7 +34,11 @@
     "test:e2e-transport": "vitest run tests/transport-e2e.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "setup-ui": "node scripts/setup-ui-server.mjs",
-    "e2e:http-grpc": "node scripts/e2e-http-grpc.mjs"
+    "e2e:http-grpc": "node scripts/e2e-http-grpc.mjs",
+    "approval-ui": "node scripts/approval-ui-server.mjs",
+    "smoke": "node scripts/smoke-probe.mjs",
+    "codegen:allowlist": "node scripts/openapi-allowlist-codegen.mjs",
+    "test:v05": "vitest run tests/v05.test.ts"
   },
   "engines": {
     "node": ">=18"

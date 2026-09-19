@@ -1,0 +1,32 @@
+{
+  "active": "dummy",
+  "unofficial": true,
+  "profiles": [
+    {
+      "name": "dummy",
+      "kind": "dummy",
+      "baseUrl": "http://127.0.0.1:9090/hcmRestApi",
+      "apiVersion": "11.13.18.05",
+      "authMode": "basic",
+      "username": "demo",
+      "passwordEnv": "ORACLE_HCM_PASSWORD",
+      "note": "Local dummy-hcm"
+    },
+    {
+      "name": "sandbox",
+      "kind": "sandbox",
+      "baseUrl": "https://fa-xxxx-hcm-test.fa.ocs.oraclecloud.com/hcmRestApi",
+      "authMode": "oauth",
+      "clientSecretEnv": "ORACLE_HCM_CLIENT_SECRET",
+      "writeMode": false
+    },
+    {
+      "name": "prod",
+      "kind": "prod",
+      "baseUrl": "https://fa-xxxx-hcm.fa.ocs.oraclecloud.com/hcmRestApi",
+      "authMode": "oauth",
+      "writeMode": false,
+      "sensitiveEnabled": false
+    }
+  ]
+}

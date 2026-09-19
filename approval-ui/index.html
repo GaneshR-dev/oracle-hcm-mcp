@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HCM approvals (unofficial)</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <h1>Pending HCM write approvals</h1>
+      <p class="sub">Unofficial · localhost only · not an Oracle product</p>
+    </header>
+    <aside class="disclaimer">Approve / deny only mutations you understand. Credentials and Fusion RBAC still apply.</aside>
+    <div class="row">
+      <label>MCP HTTP base <input id="base" value="http://127.0.0.1:8788" /></label>
+      <button id="refresh" class="btn primary" type="button">Refresh</button>
+    </div>
+    <pre id="status" class="result" hidden></pre>
+    <ul id="list" class="list"></ul>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

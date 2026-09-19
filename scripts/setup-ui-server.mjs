@@ -249,6 +249,68 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+
+  if (req.method === 'POST' && url.pathname === '/api/oauth-token-status') {
+    try {
+      const body = await readJsonBody(req);
+      log('oauth-token-status', {
+        tokenUrl: String(body.tokenUrl ?? ''),
+        authMode: sanitizeAuthMode(body.authMode),
+      });
+      if (sanitizeAuthMode(body.authMode) !== 'oauth') {
+        sendJson(res, 200, {
+          ok: false,
+          error: 'authMode is not oauth',
+          hint: 'Switch ORACLE_HCM_AUTH to oauth to test token refresh.',
+        });
+        return;
+      }
+      const started = Date.now();
+      // fetchOAuthToken returns access_token string only — get expiry via raw fetch
+      const tokenUrl = String(body.tokenUrl ?? '');
+      const clientId = String(body.clientId ?? '');
+      const clientSecret = String(body.clientSecret ?? '');
+      const form = new URLSearchParams({
+        grant_type: 'client_credentials',
+        client_id: clientId,
+        client_secret: clientSecret,
+      });
+      const tres = await fetch(tokenUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: form,
+      });
+      if (!tres.ok) {
+        sendJson(res, 200, {
+          ok: false,
+          status: tres.status,
+          latencyMs: Date.now() - started,
+          error: 'Token request failed',
+          note: 'Client secret was not logged or returned.',
+        });
+        return;
+      }
+      const data = await tres.json();
+      const expiresIn = Number(data.expires_in ?? 3600);
+      sendJson(res, 200, {
+        ok: true,
+        hasToken: Boolean(data.access_token),
+        tokenType: data.token_type ?? 'Bearer',
+        expiresInSec: expiresIn,
+        expiresAt: new Date(Date.now() + expiresIn * 1000).toISOString(),
+        refreshAvailable: true,
+        latencyMs: Date.now() - started,
+        note: 'Access token value never returned. Unofficial setup UI — not Oracle.',
+      });
+    } catch (e) {
+      sendJson(res, e?.status ?? 500, {
+        ok: false,
+        error: e instanceof Error ? e.message : 'OAuth status failed',
+      });
+    }
+    return;
+  }
+
   if (req.method === 'POST' && url.pathname === '/api/test-connection') {
     try {
       const body = await readJsonBody(req);

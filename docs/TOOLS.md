@@ -1,6 +1,6 @@
-# Tools (v0.4)
+# Tools (v0.5)
 
-Unofficial MCP tool catalog. Not an Oracle product. 110+ tools (v0.4).
+Unofficial MCP tool catalog. Not an Oracle product. 140+ tools (v0.5).
 
 ## Meta / setup
 
@@ -74,3 +74,26 @@ Organizations, locations, jobs, grades search/get;
 
 `hcm_list_pending_approvals`, `hcm_approve_write`, `hcm_deny_write`
 (always registered; sensitive tools use them even under `--write`)
+
+
+## v0.5 additions
+
+**Smoke / profiles:** `hcm_smoke_probe`, `hcm_list_smoke_reports`, `hcm_list_profiles`, `hcm_switch_profile`, `hcm_upsert_profile`, `hcm_emit_profile_mcp_config`
+
+**OAuth / identity:** `hcm_oauth_token_status`, `hcm_oauth_refresh`, `hcm_test_as_user`
+
+**Person deep-read:** `hcm_get_legislative_data`, `hcm_list_work_relationships`, `hcm_get_assignment_history`, `hcm_person_deep_read`
+
+**Recruiting depth:** `hcm_search_offers`, `hcm_get_offer`, `hcm_search_interviews`, `hcm_get_interview`, `hcm_list_candidate_attachments`
+
+**Time E2E:** `hcm_validate_time_card`, `hcm_get_time_card`, `hcm_recipe_time_submit`
+
+**Benefits write:** `hcm_enroll_benefit`, `hcm_opt_out_benefit`
+
+**Recipes:** `hcm_recipe_new_hire_checklist`, `hcm_recipe_absence_balance_approve`
+
+**Redaction / batch / atom / webhook:** `hcm_list_redaction_audit`, `hcm_clear_redaction_audit`, `hcm_batch_get`, `hcm_atom_replay`, `hcm_atom_real_pod_guide`, `hcm_webhook_rotate_secret`, `hcm_bulk_bp_preview`
+
+**Learning / goals writes:** `hcm_create_goal`, `hcm_update_goal`, `hcm_enroll_learning`, `hcm_update_learning_enrollment`
+
+**Compensation / absence LOVs:** `hcm_update_compensation` (SENSITIVE), `hcm_get_absence_type`, `hcm_get_absence_plan`, `hcm_balance_by_plan`

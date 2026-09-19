@@ -10,9 +10,14 @@ Unofficial Model Context Protocol (MCP) server for **Oracle Fusion Cloud HCM** R
 
 ## Status
 
-v0.4 — Atom CDC (poll/consume + checkpoints), HMAC webhook signing, file/sqlite multi-node approvals,
+v0.5 — smoke probe profiles, OAuth/setup polish, person deep-read, recruiting offers/interviews/attachments,
+time validate→submit, benefits enroll/opt-out, recipes, redaction audit, multi-env switcher, Atom replay + real-pod hooks,
+webhook rotating secrets/mTLS, approval UI, OpenAPI allowlist codegen, batch GET / pool / 429 tuning,
+learning/goals writes, compensation update (sensitive), absence LOV helpers. **140+ tools**.
+Perfect ADF coverage is **not** a goal. See [docs/ROADMAP.md](docs/ROADMAP.md).
+
 curated ADF finders (`hcm_lov_find` / `hcm_describe_finder`), richer payslip fields, heavier HTTP/gRPC e2e.
-Builds on v0.3 curated domains. **110+ tools**. Perfect ADF coverage is **not** a goal.
+Builds on v0.3 curated domains. **140+ tools**. Perfect ADF coverage is **not** a goal.
 See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ### Honest coverage
@@ -46,6 +51,16 @@ Unknown / future `hcm_*` tools are classified as **write** (safe default).
 - **Streamable HTTP** — `POST /mcp` (plus `GET /health`)
 - **gRPC** — custom bridge wrapping MCP JSON-RPC (`proto/mcp_bridge.proto`)
 
+
+## Approval UI (humans)
+
+```bash
+# MCP HTTP must be running, e.g. npx oracle-hcm-mcp --http 8788
+npm run approval-ui
+# open http://127.0.0.1:8796
+```
+
+Tiny localhost page to list / approve / deny pending writes. Unofficial — not Oracle.
 
 ## Setup UI (local wizard)
 
@@ -120,10 +135,14 @@ oracle-hcm-mcp --base-url http://127.0.0.1:9090/hcmRestApi
 | `ORACLE_HCM_APPROVAL_STORE_PATH` | Path for file/sqlite approval store |
 | `ORACLE_HCM_WEBHOOK_SECRET` | HMAC-SHA256 secret for webhook receiver (`X-HCM-Signature`) |
 | `ORACLE_HCM_ATOM_CHECKPOINT_PATH` | Atom CDC checkpoint JSON path |
+| `ORACLE_HCM_PROFILES_PATH` | Multi-env profiles.json path |
+| `ORACLE_HCM_SMOKE_DIR` | Smoke probe report directory |
+| `ORACLE_HCM_WEBHOOK_SECRETS` | Comma-separated rotating webhook HMAC secrets |
+| `ORACLE_HCM_WEBHOOK_MTLS` | `1` to enable webhook mTLS (needs TLS key/cert/ca env) |
 
 Auth note: credentials open the HTTP door; **HCM RBAC** still decides what the user/app can do.
 
-## Tools (v0.4)
+## Tools (v0.5)
 
 **Meta / setup:** `hcm_health`, `hcm_whoami`, `hcm_list_resources`, `hcm_describe_resource`, `hcm_setup_status`, `hcm_test_connection`, `hcm_emit_mcp_config`, `hcm_export_config`
 

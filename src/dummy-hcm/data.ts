@@ -127,6 +127,11 @@ export type TalentProfile = {
 
 export type Requisition = { RequisitionId: string; RequisitionNumber: string; Title: string; Status: string };
 export type Candidate = { CandidateId: string; DisplayName: string; Email?: string; Status: string };
+export type JobOffer = { OfferId: string; CandidateId: string; RequisitionId: string; Status: string; ProposedSalary?: number; Currency?: string };
+export type Interview = { InterviewId: string; CandidateId: string; RequisitionId: string; ScheduledStart: string; Status: string; InterviewType?: string };
+export type CandidateAttachment = { AttachmentId: string; CandidateId: string; FileName: string; ContentType: string; UploadedAt: string };
+export type LegislativeData = { LegislativeDataId: string; PersonNumber: string; WorkerId?: string; LegislationCode: string; MaritalStatus?: string; Sex?: string };
+export type AssignmentHistory = { HistoryId: string; WorkerId: string; AssignmentId: string; EffectiveStartDate: string; EffectiveEndDate?: string; ActionCode?: string; JobId?: string };
 export type BenefitEnrollment = { EnrollmentId: string; PersonNumber: string; PlanName: string; Status: string };
 export type Position = { PositionId: string; PositionCode: string; Name: string; Status: string; OrganizationId?: string };
 export type Contact = { ContactId: string; PersonNumber: string; ContactName: string; Relationship: string };
@@ -627,6 +632,23 @@ export function seedStore() {
     },
   ];
 
+
+  const offers: JobOffer[] = [
+    { OfferId: 'OFF1', CandidateId: 'CAN1', RequisitionId: 'REQ1', Status: 'EXTENDED', ProposedSalary: 145000, Currency: 'USD' },
+  ];
+  const interviews: Interview[] = [
+    { InterviewId: 'INT1', CandidateId: 'CAN1', RequisitionId: 'REQ1', ScheduledStart: '2026-09-22T15:00:00Z', Status: 'SCHEDULED', InterviewType: 'PANEL' },
+  ];
+  const candidateAttachments: CandidateAttachment[] = [
+    { AttachmentId: 'ATT1', CandidateId: 'CAN1', FileName: 'resume.pdf', ContentType: 'application/pdf', UploadedAt: '2026-09-10T12:00:00Z' },
+  ];
+  const legislativeData: LegislativeData[] = [
+    { LegislativeDataId: 'LD1', PersonNumber: 'P1001', WorkerId: '1001', LegislationCode: 'US', MaritalStatus: 'M', Sex: 'F' },
+  ];
+  const assignmentHistories: AssignmentHistory[] = [
+    { HistoryId: 'AH1', WorkerId: '1001', AssignmentId: 'AS1', EffectiveStartDate: '2024-01-15', ActionCode: 'HIRE', JobId: 'J1' },
+    { HistoryId: 'AH2', WorkerId: '1001', AssignmentId: 'AS1', EffectiveStartDate: '2025-06-01', ActionCode: 'PROMOTION', JobId: 'J1' },
+  ];
   return {
     workers,
     workerAssignments,
@@ -664,6 +686,11 @@ export function seedStore() {
     elementEntries,
     calculationCards,
     atomfeeds,
+    offers,
+    interviews,
+    candidateAttachments,
+    legislativeData,
+    assignmentHistories,
     nextId,
   };
 }

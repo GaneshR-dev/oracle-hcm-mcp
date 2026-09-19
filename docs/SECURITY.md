@@ -57,3 +57,11 @@ await fetch('http://127.0.0.1:8795/webhook', {
 
 `hcm_atom_poll` / `hcm_atom_consume` store cursors locally (`ORACLE_HCM_ATOM_CHECKPOINT_PATH`).
 This is **not** Oracle CDC — local unofficial change detection over Atom feeds.
+
+
+## Webhook rotating secrets / mTLS (v0.5)
+
+- `ORACLE_HCM_WEBHOOK_SECRET` — primary HMAC secret
+- `ORACLE_HCM_WEBHOOK_SECRETS` — comma-separated additional secrets accepted during rotation
+- `hcm_webhook_rotate_secret` — rotate on a running receiver (keeps previous by default)
+- mTLS: `ORACLE_HCM_WEBHOOK_MTLS=1` + `ORACLE_HCM_WEBHOOK_TLS_KEY` / `_CERT` / optional `_CA`

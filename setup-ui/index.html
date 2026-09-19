@@ -35,11 +35,22 @@
             <span class="card-desc">Local mock · basic auth <code>demo</code>/<code>demo</code> · safe for learning</span>
           </label>
           <label class="card">
+            <input type="radio" name="target" value="sandbox" />
+            <span class="card-title">Sandbox / test</span>
+            <span class="card-desc">Non-prod Fusion · profile label <code>sandbox</code></span>
+          </label>
+          <label class="card">
+            <input type="radio" name="target" value="prod" />
+            <span class="card-title">Prod (careful)</span>
+            <span class="card-desc">Production · approval-by-default · least privilege</span>
+          </label>
+          <label class="card">
             <input type="radio" name="target" value="real" />
-            <span class="card-title">Real Fusion</span>
-            <span class="card-desc">Your Oracle Fusion Cloud HCM REST base · use a non-prod env first</span>
+            <span class="card-title">Custom Fusion URL</span>
+            <span class="card-desc">Paste any HCM REST base</span>
           </label>
         </div>
+        <p class="hint">Profiles avoid re-editing mcp.json by hand — export per-env fragments in step 6.</p>
       </section>
 
       <!-- 1 url -->
@@ -85,6 +96,15 @@
           <label class="field"><span>Token URL</span><input id="tokenUrl" type="url" autocomplete="off" spellcheck="false" /></label>
           <label class="field"><span>Client ID</span><input id="clientId" type="text" autocomplete="off" /></label>
           <label class="field"><span>Client secret</span><input id="clientSecret" type="password" autocomplete="off" /></label>
+          <div class="row" style="margin-top:.5rem;gap:.5rem;flex-wrap:wrap">
+            <button type="button" id="btnOAuthRefresh" class="btn">Test token / refresh</button>
+            <button type="button" id="btnTestAsUser" class="btn">Test as user…</button>
+          </div>
+          <pre id="oauthStatus" class="result" hidden></pre>
+          <label class="field" style="margin-top:.5rem"><span>Test-as-user username (basic probe)</span>
+            <input id="testAsUser" type="text" placeholder="hcm_readonly_user" autocomplete="username" />
+          </label>
+          <p class="hint">Token expiry shown after probe — secrets never echoed. “Test as user” uses basic auth with that username + password from the Basic fields (or current password).</p>
         </div>
       </section>
 
@@ -120,8 +140,11 @@
         <div class="row">
           <button type="button" id="btnCopyMcp" class="btn primary">Copy mcp.json fragment</button>
           <button type="button" id="btnWriteEnv" class="btn">Optional: write .env.local</button>
+          <button type="button" id="btnCopyReinstall" class="btn">Copy reinstall steps</button>
         </div>
         <pre id="mcpJson" class="result code"></pre>
+        <h3>One-click Cursor reinstall (full tool set)</h3>
+        <pre id="reinstallSteps" class="result code"></pre>
         <p id="envWriteMsg" class="hint" hidden></p>
       </section>
 

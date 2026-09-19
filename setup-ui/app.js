@@ -74,6 +74,7 @@
 
   function applyDummyDefaults() {
     if (selected('target') !== 'dummy') return;
+
     $('baseUrl').value = DUMMY.baseUrl;
     $('apiVersion').value = DUMMY.apiVersion;
     $('authMode').value = DUMMY.authMode;
@@ -162,8 +163,25 @@
 
   function go(n) {
     if (n < 0 || n >= STEPS.length) return;
-    if (n === 1) applyDummyDefaults();
-    if (n === 5) refreshMcpPreview();
+    if (n === 1) {
+      const t = selected('target');
+      if (t === 'dummy') applyDummyDefaults();
+      if (t === 'sandbox' || t === 'prod') {
+        if ($('profile')) $('profile').value = t;
+        if (t === 'sandbox' && (!$('baseUrl').value || $('baseUrl').value === DUMMY.baseUrl)) {
+          $('baseUrl').value = 'https://fa-xxxx-hcm-test.fa.ocs.oraclecloud.com/hcmRestApi';
+        }
+        if (t === 'prod' && (!$('baseUrl').value || $('baseUrl').value === DUMMY.baseUrl)) {
+          $('baseUrl').value = 'https://fa-xxxx-hcm.fa.ocs.oraclecloud.com/hcmRestApi';
+        }
+        $('authMode').value = 'oauth';
+        syncAuthBlocks();
+      }
+    }
+    if (n === 5) {
+      refreshMcpPreview();
+      if (typeof refreshReinstall === 'function') refreshReinstall();
+    }
     step = n;
     panels().forEach((p) => {
       p.classList.toggle('hidden', Number(p.dataset.step) !== step);
@@ -275,4 +293,79 @@
   }
 
   init();
+
+  // v0.5 OAuth polish + multi-env + reinstall
+  function refreshReinstall() {
+    const s = state();
+    const frag = mcpFragment(s);
+    const steps = [
+      '# Unofficial oracle-hcm-mcp — Cursor MCP reinstall (full tool set)',
+      'npm run build',
+      '# Paste the mcpServers JSON below into Cursor → MCP settings',
+      '# Reload Cursor window',
+      '# Confirm tools include hcm_smoke_probe, hcm_recipe_*, hcm_person_deep_read, …',
+      '',
+      JSON.stringify(frag, null, 2),
+    ].join('\n');
+    const el = $('reinstallSteps');
+    if (el) el.textContent = steps;
+  }
+
+
+  $('btnOAuthRefresh')?.addEventListener('click', async () => {
+    const out = $('oauthStatus');
+    if (!out) return;
+    out.hidden = false;
+    out.textContent = 'Requesting token (secret not logged)…';
+    try {
+      const res = await fetch('/api/oauth-token-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(testPayload()),
+      });
+      const data = await res.json();
+      out.textContent = JSON.stringify(data, null, 2);
+    } catch (e) {
+      out.textContent = JSON.stringify({ ok: false, error: String(e) }, null, 2);
+    }
+  });
+
+  $('btnTestAsUser')?.addEventListener('click', async () => {
+    const out = $('oauthStatus') || $('testResult');
+    if (!out) return;
+    out.hidden = false;
+    const username = ($('testAsUser')?.value || $('username')?.value || '').trim();
+    if (!username) {
+      out.textContent = JSON.stringify({ ok: false, error: 'Enter test-as-user username' }, null, 2);
+      return;
+    }
+    const payload = testPayload();
+    payload.authMode = 'basic';
+    payload.username = username;
+    payload.password = $('password')?.value || payload.password;
+    out.textContent = 'Probing as ' + username + '…';
+    try {
+      const res = await fetch('/api/test-connection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      out.textContent = JSON.stringify({ testedAs: username, ...data }, null, 2);
+    } catch (e) {
+      out.textContent = JSON.stringify({ ok: false, error: String(e) }, null, 2);
+    }
+  });
+
+  $('btnCopyReinstall')?.addEventListener('click', async () => {
+    refreshReinstall();
+    const text = $('reinstallSteps')?.textContent || '';
+    try {
+      await navigator.clipboard.writeText(text);
+      alert('Reinstall steps copied');
+    } catch {
+      prompt('Copy:', text);
+    }
+  });
+
 })();

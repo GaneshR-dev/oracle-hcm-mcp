@@ -499,6 +499,11 @@ export function createDummyApp(store?: Store): express.Express {
 
   crud('recruitingJobRequisitions', s.requisitions as unknown as Record<string, unknown>[], 'RequisitionId');
   crud('recruitingCandidates', s.candidates as unknown as Record<string, unknown>[], 'CandidateId');
+  crud('recruitingJobOffers', s.offers as unknown as Record<string, unknown>[], 'OfferId');
+  crud('recruitingInterviews', s.interviews as unknown as Record<string, unknown>[], 'InterviewId');
+  crud('recruitingCandidateAttachments', s.candidateAttachments as unknown as Record<string, unknown>[], 'AttachmentId');
+  crud('workerLegislativeData', s.legislativeData as unknown as Record<string, unknown>[], 'LegislativeDataId');
+  crud('assignmentHistories', s.assignmentHistories as unknown as Record<string, unknown>[], 'HistoryId');
   crud('benefitEnrollments', s.benefitEnrollments as unknown as Record<string, unknown>[], 'EnrollmentId');
   crud('positions', s.positions as unknown as Record<string, unknown>[], 'PositionId');
   crud('hcmContacts', s.contacts as unknown as Record<string, unknown>[], 'ContactId');
@@ -638,6 +643,79 @@ export function createDummyApp(store?: Store): express.Express {
     res.status(201).json(row);
   });
 
+
+
+  // Time card validate (v0.5 E2E)
+  app.post(`${API}/timeCards/action/validate`, (req, res) => {
+    const body = req.body ?? {};
+    const issues: string[] = [];
+    if (!body.PersonNumber && !body.personNumber) issues.push('PersonNumber required');
+    if (!body.PeriodStart && !body.periodStart) issues.push('PeriodStart required');
+    if (!body.PeriodEnd && !body.periodEnd) issues.push('PeriodEnd required');
+    res.json({ valid: issues.length === 0, issues, unofficial: true });
+  });
+
+  // Benefits enroll / opt-out
+  app.post(`${API}/benefitEnrollments/action/enroll`, (req, res) => {
+    const id = s.nextId('BE');
+    const row = {
+      EnrollmentId: id,
+      PersonNumber: req.body?.PersonNumber ?? 'P1001',
+      PlanName: req.body?.PlanName ?? 'Medical PPO',
+      Status: 'ENROLLED',
+    };
+    s.benefitEnrollments.push(row);
+    res.status(201).json(row);
+  });
+  app.post(`${API}/benefitEnrollments/:id/action/optOut`, (req, res) => {
+    const row = s.benefitEnrollments.find((x) => x.EnrollmentId === req.params.id);
+    if (!row) return res.status(404).json({ error: 'Not found' });
+    row.Status = 'OPTED_OUT';
+    res.json({ ...row, optedOut: true });
+  });
+
+  // Goals create already via generic POST if crud supports — ensure POST/PATCH on goals/learning
+  // crud() only does GET; add write routes
+  app.post(`${API}/goals`, (req, res) => {
+    const id = s.nextId('G');
+    const row = {
+      GoalId: id,
+      PersonNumber: req.body?.PersonNumber ?? 'P1001',
+      GoalName: req.body?.GoalName ?? 'Goal',
+      Status: req.body?.Status ?? 'IN_PROGRESS',
+    };
+    s.goals.push(row);
+    res.status(201).json(row);
+  });
+  app.patch(`${API}/goals/:id`, (req, res) => {
+    const row = s.goals.find((x) => x.GoalId === req.params.id);
+    if (!row) return res.status(404).json({ error: 'Not found' });
+    Object.assign(row, req.body);
+    res.json(row);
+  });
+  app.post(`${API}/learningEnrollments`, (req, res) => {
+    const id = s.nextId('LE');
+    const row = {
+      EnrollmentId: id,
+      PersonNumber: req.body?.PersonNumber ?? 'P1001',
+      CourseName: req.body?.CourseName ?? 'Course',
+      Status: req.body?.Status ?? 'ENROLLED',
+    };
+    s.learningEnrollments.push(row);
+    res.status(201).json(row);
+  });
+  app.patch(`${API}/learningEnrollments/:id`, (req, res) => {
+    const row = s.learningEnrollments.find((x) => x.EnrollmentId === req.params.id);
+    if (!row) return res.status(404).json({ error: 'Not found' });
+    Object.assign(row, req.body);
+    res.json(row);
+  });
+  app.patch(`${API}/compensationHistories/:id`, (req, res) => {
+    const row = s.compensationHistories.find((x) => x.CompensationId === req.params.id);
+    if (!row) return res.status(404).json({ error: 'Not found' });
+    Object.assign(row, req.body);
+    res.json(row);
+  });
 
   // Blocklist demo
   app.all(`${API}/ce/*path`, (_req, res) => {

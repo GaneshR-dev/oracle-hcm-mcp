@@ -66,6 +66,12 @@ const ALLOWED_ROOTS = [
   // Absence LOVs
   'absenceTypes',
   'absencePlans',
+  // Recruiting depth / person deep-read (v0.5)
+  'recruitingJobOffers',
+  'recruitingInterviews',
+  'recruitingCandidateAttachments',
+  'workerLegislativeData',
+  'assignmentHistories',
   // Atom / change
   'atomfeeds',
   'atomFeeds',

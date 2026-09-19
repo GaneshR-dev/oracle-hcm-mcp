@@ -37,8 +37,8 @@ export function bindExecutor(
   ctx.executors.set(toolName, execute);
 }
 
-export function jsonResult(data: unknown, redact = true): CallToolResult {
-  const payload = redact ? redactDeep(data) : data;
+export function jsonResult(data: unknown, redact = true, tool?: string): CallToolResult {
+  const payload = redact ? redactDeep(data, 0, { tool, audit: true }) : data;
   return {
     content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }],
   };

@@ -14,6 +14,7 @@ export const SENSITIVE_TOOLS = new Set([
   'hcm_search_payment_methods',
   'hcm_get_compensation',
   'hcm_search_compensation',
+  'hcm_update_compensation',
 ]);
 
 export function isSensitiveTool(name: string): boolean {

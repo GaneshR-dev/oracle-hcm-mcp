@@ -78,14 +78,14 @@ describe('Streamable HTTP /mcp e2e', () => {
     const body = await res.json();
     expect(body.ok).toBe(true);
     expect(body.unofficial).toBe(true);
-    expect(body.version).toBe('0.4.0');
+    expect(body.version).toBe('0.5.0');
   });
 
   it('lists tools, health, search workers, approval path', async () => {
     const transport = new StreamableHTTPClientTransport(
       new URL(`http://127.0.0.1:${httpHandle.port}/mcp`),
     );
-    const client = new Client({ name: 'http-e2e', version: '0.4.0' });
+    const client = new Client({ name: 'http-e2e', version: '0.5.0' });
     await client.connect(transport);
     try {
       const { tools } = await client.listTools();
@@ -145,11 +145,11 @@ describe('gRPC McpBridge e2e', () => {
         params: {
           protocolVersion: '2024-11-05',
           capabilities: {},
-          clientInfo: { name: 'grpc-e2e', version: '0.4.0' },
+          clientInfo: { name: 'grpc-e2e', version: '0.5.0' },
         },
       })) as { result?: { serverInfo?: { name: string; version: string } } };
       expect(init.result?.serverInfo?.name).toBe('oracle-hcm-mcp');
-      expect(init.result?.serverInfo?.version).toBe('0.4.0');
+      expect(init.result?.serverInfo?.version).toBe('0.5.0');
 
       // notifications/initialized (no id)
       await grpc.call({

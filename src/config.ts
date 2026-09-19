@@ -38,6 +38,8 @@ export interface Config {
   transport: 'stdio' | 'http' | 'grpc';
   /** Optional named profile label for multi-env setups */
   profile?: string;
+  /** Path to profiles.json for multi-env switcher */
+  profilesPath?: string;
 }
 
 function envFlag(name: string): boolean {
@@ -107,6 +109,7 @@ export function parseArgs(argv: string[] = process.argv.slice(2)): Config {
     webhookPort,
     transport,
     profile,
+    profilesPath: process.env.ORACLE_HCM_PROFILES_PATH,
   };
 }
 
@@ -140,7 +143,8 @@ Env:
   ORACLE_HCM_BEARER_TOKEN, ORACLE_HCM_WRITE=1, ORACLE_HCM_API_VERSION,
   ORACLE_HCM_SENSITIVE=1, ORACLE_HCM_SENSITIVE_WRITE=1, ORACLE_HCM_PROFILE,
   ORACLE_HCM_APPROVAL_STORE=memory|file|sqlite, ORACLE_HCM_APPROVAL_STORE_PATH,
-  ORACLE_HCM_WEBHOOK_SECRET, ORACLE_HCM_ATOM_CHECKPOINT_PATH
+  ORACLE_HCM_WEBHOOK_SECRET, ORACLE_HCM_WEBHOOK_SECRETS, ORACLE_HCM_WEBHOOK_MTLS,
+  ORACLE_HCM_ATOM_CHECKPOINT_PATH, ORACLE_HCM_PROFILES_PATH, ORACLE_HCM_SMOKE_DIR
 `);
 }
 
@@ -164,6 +168,7 @@ export function publicConfigView(cfg: Config): Record<string, unknown> {
     hasBearerToken: Boolean(cfg.bearerToken),
     hasClientSecret: Boolean(cfg.clientSecret),
     profile: cfg.profile ?? null,
+    profilesPath: cfg.profilesPath ?? null,
     transport: cfg.transport,
     approvalStore: cfg.approvalStore,
     approvalStorePath: cfg.approvalStorePath ?? null,
