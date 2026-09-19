@@ -5,18 +5,112 @@ Unofficial Model Context Protocol (MCP) server for **Oracle Fusion Cloud HCM** R
 > **Not an Oracle product.** Not affiliated with, endorsed by, or supported by Oracle Corporation.
 > Provided as-is under the MIT License. **You** are responsible for compliance with your Oracle
 > licenses, HCM security roles, privacy/PII rules, and any damage caused by write operations.
+> This project does **not** claim to be an official Oracle integration, SDK, or partner solution.
+> Oracle® and Java® are trademarks of Oracle Corporation. Use of these names does not imply endorsement.
 
 ## Status
 
-Under active development. See docs as they land.
+v0.1 MVP — curated tools for workers, absences, areas of responsibility (AOR), allocated
+checklists/tasks, business-process notifications, meta helpers, and allowlisted generic REST.
+Perfect ADF coverage is **not** a goal of this release.
 
 ## Safety modes
 
-- **Default:** mutating tools require human approval (`hcm_approve_write` / `hcm_deny_write`).
-- **`--write`:** mutations run end-to-end with **no** approval gate (trusted automation only).
+| Mode | Behavior |
+|------|----------|
+| **Default** | Mutating tools return `pending_approval` with an `approval_id`. A human (or trusted client) must call `hcm_approve_write` or `hcm_deny_write`. Approval tools are registered. |
+| **`--write`** / `ORACLE_HCM_WRITE=1` | Mutations run **immediately**. Approval tools are **not** registered. Use only for trusted automation against non-production or carefully controlled environments. |
+
+Unknown / future `hcm_*` tools are classified as **write** (safe default).
 
 ## Transports
 
-- stdio (default)
-- Streamable HTTP
-- gRPC (custom / pluggable transport)
+- **stdio** (default) — for Claude Desktop / Cursor / MCP clients
+- **Streamable HTTP** — `POST /mcp` (plus `GET /health`)
+- **gRPC** — custom bridge wrapping MCP JSON-RPC (`proto/mcp_bridge.proto`)
+
+## Quick start
+
+```bash
+npm install
+npm run build
+npm test
+
+# Local mock HCM (basic auth demo/demo) on :9090
+npm run dummy-hcm
+
+# MCP over stdio against the mock (approval mode)
+ORACLE_HCM_BASE_URL=http://127.0.0.1:9090/hcmRestApi \
+ORACLE_HCM_USERNAME=demo ORACLE_HCM_PASSWORD=demo \
+npx oracle-hcm-mcp
+
+# Unrestricted writes (trusted only)
+npx oracle-hcm-mcp --write --base-url http://127.0.0.1:9090/hcmRestApi
+
+# Streamable HTTP
+npx oracle-hcm-mcp --http 8788 --base-url http://127.0.0.1:9090/hcmRestApi
+
+# gRPC bridge
+npx oracle-hcm-mcp --grpc 8789 --base-url http://127.0.0.1:9090/hcmRestApi
+```
+
+### CLI
+
+```
+oracle-hcm-mcp                     # stdio, approval required for writes
+oracle-hcm-mcp --write             # stdio, unrestricted writes
+oracle-hcm-mcp --http 8788
+oracle-hcm-mcp --grpc 8789
+oracle-hcm-mcp --base-url http://127.0.0.1:9090/hcmRestApi
+```
+
+### Environment
+
+| Variable | Meaning |
+|----------|---------|
+| `ORACLE_HCM_BASE_URL` | e.g. `https://fa-….fa.ocs.oraclecloud.com/hcmRestApi` |
+| `ORACLE_HCM_API_VERSION` | default `11.13.18.05` |
+| `ORACLE_HCM_AUTH` | `basic` \| `oauth` \| `bearer` \| `none` |
+| `ORACLE_HCM_USERNAME` / `PASSWORD` | Basic auth |
+| `ORACLE_HCM_BEARER_TOKEN` | Bearer token |
+| `ORACLE_HCM_TOKEN_URL` / `CLIENT_ID` / `CLIENT_SECRET` | OAuth client-credentials (IDCS) |
+| `ORACLE_HCM_WRITE=1` | Same as `--write` |
+| `ORACLE_HCM_APPROVAL_TTL_MS` | Pending intent TTL (default 15 min) |
+
+Auth note: credentials open the HTTP door; **HCM RBAC** still decides what the user/app can do.
+
+## Tools (v1)
+
+**Meta:** `hcm_health`, `hcm_whoami`, `hcm_list_resources`, `hcm_describe_resource`
+
+**Workers:** `hcm_search_workers`, `hcm_get_worker`, `hcm_create_worker`, `hcm_update_worker`
+
+**Absences:** `hcm_search_absences`, `hcm_get_absence`, `hcm_create_absence`, `hcm_update_absence`, `hcm_delete_absence`, `hcm_absence_balance`
+
+**AOR:** `hcm_search_aor`, `hcm_get_aor`, `hcm_create_aor`, `hcm_update_aor`, `hcm_delete_aor`
+
+**Checklists:** `hcm_list_checklists`, `hcm_get_checklist`, `hcm_update_task_status`
+
+**BP / notifications:** `hcm_list_notifications`, `hcm_get_notification`, `hcm_perform_bp_action`
+
+**Generic (allowlisted):** `hcm_rest_get`, `hcm_rest_mutate`
+
+**Approval (only when not `--write`):** `hcm_list_pending_approvals`, `hcm_approve_write`, `hcm_deny_write`
+
+CE / generative-AI / Oracle-internal style paths are **blocklisted** for generic REST.
+
+## Docs
+
+- [docs/TOOLS.md](docs/TOOLS.md)
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- [docs/SECURITY.md](docs/SECURITY.md)
+- [docs/ORACLE_MAPPING.md](docs/ORACLE_MAPPING.md)
+
+## Reference
+
+- HCM REST base pattern: `/hcmRestApi/resources/11.13.18.05/`
+- Oracle docs: https://docs.oracle.com/en/cloud/saas/human-resources/farws/rest-endpoints.html
+
+## License
+
+MIT — see [LICENSE](LICENSE). No warranty. No liability. Not an Oracle product.

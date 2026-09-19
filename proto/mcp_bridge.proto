@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package mcpbridge;
+
+// Custom gRPC bridge that wraps MCP JSON-RPC payloads.
+// Unofficial Oracle HCM MCP — not affiliated with Oracle Corporation.
+
+service McpBridge {
+  // Unary: send one JSON-RPC request string, receive one JSON-RPC response string.
+  rpc Call (JsonRpcMessage) returns (JsonRpcMessage);
+
+  // Bidirectional stream of JSON-RPC messages.
+  rpc Stream (stream JsonRpcMessage) returns (stream JsonRpcMessage);
+}
+
+message JsonRpcMessage {
+  string json_rpc = 1;
+}
