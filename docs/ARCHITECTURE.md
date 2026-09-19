@@ -26,14 +26,14 @@ proto/mcp_bridge.proto
 1. Client calls a write tool.
 2. If `writeMode`: client executes against HCM immediately.
 3. Else: `ApprovalStore.create` → return `pending_approval`.
-4. `hcm_approve_write` re-runs the stored args through the same client paths.
+4. `hcm_approve_write` requires `approval_token` (never returned in step 3) then re-runs the stored args. HTTP `POST /approvals/:id/approve` with bearer is the out-of-band path.
 5. Intents expire after `ORACLE_HCM_APPROVAL_TTL_MS` (default 15 minutes).
 
 ## Transports
 
 - **stdio**: `StdioServerTransport`
-- **HTTP**: Node `http` + `StreamableHTTPServerTransport` (stateless per request; shared approval store)
-- **gRPC**: `McpBridge.Call` / `Stream` with `json_rpc` string payloads
+- **HTTP**: Node `http` + `StreamableHTTPServerTransport` (stateless per request; shared approval store; Bearer on `/mcp` and `/approvals`; localhost Origin CORS)
+- **gRPC**: `McpBridge.Call` / `Stream` with `json_rpc` string payloads + bearer metadata
 
 ## Dummy HCM
 

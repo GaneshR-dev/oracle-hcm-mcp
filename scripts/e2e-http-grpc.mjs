@@ -21,6 +21,8 @@ const ENV = {
   ORACLE_HCM_AUTH: 'basic',
   ORACLE_HCM_USERNAME: 'demo',
   ORACLE_HCM_PASSWORD: 'demo',
+  ORACLE_HCM_APPROVAL_TOKEN: process.env.ORACLE_HCM_APPROVAL_TOKEN ?? 'e2e-approval-token',
+  ORACLE_HCM_HTTP_TOKEN: process.env.ORACLE_HCM_HTTP_TOKEN ?? 'e2e-http-token',
 };
 
 function spawnMcp(args) {
@@ -65,6 +67,7 @@ async function runHttp() {
 
     const transport = new StreamableHTTPClientTransport(
       new URL(`http://127.0.0.1:${HTTP_PORT}/mcp`),
+      { requestInit: { headers: { Authorization: `Bearer ${ENV.ORACLE_HCM_HTTP_TOKEN}` } } },
     );
     const client = new Client({ name: 'e2e-http', version: '0.4.0' });
     await client.connect(transport);
@@ -83,7 +86,7 @@ async function runHttp() {
     const denied = parseTool(
       await client.callTool({
         name: 'hcm_deny_write',
-        arguments: { approval_id: pending.approval_id },
+        arguments: { approval_id: pending.approval_id, approval_token: ENV.ORACLE_HCM_APPROVAL_TOKEN },
       }),
     );
     if (!denied.denied) throw new Error('deny failed');
@@ -111,9 +114,11 @@ async function runGrpc() {
     `127.0.0.1:${GRPC_PORT}`,
     grpc.credentials.createInsecure(),
   );
+  const md = new grpc.Metadata();
+  md.set('authorization', `Bearer ${ENV.ORACLE_HCM_HTTP_TOKEN}`);
   const call = (msg) =>
     new Promise((resolve, reject) => {
-      client.Call({ json_rpc: JSON.stringify(msg) }, (err, res) => {
+      client.Call({ json_rpc: JSON.stringify(msg) }, md, (err, res) => {
         if (err) reject(err);
         else resolve(JSON.parse(res.json_rpc));
       });

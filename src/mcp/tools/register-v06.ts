@@ -15,6 +15,7 @@ import {
   errorResult,
   bindExecutor,
   recordAudit,
+  requireApprovalToken,
 } from './helpers.js';
 import {
   getFieldMap,
@@ -32,6 +33,7 @@ import {
 } from '../../platform/openapiAllowlist.js';
 import { listAllowlistRoots } from '../../policy/allowlist.js';
 import { redactDeep } from '../../platform/redact.js';
+import { adfEquals } from '../../policy/adf.js';
 
 const listArgs = {
   q: z.string().optional().describe('ADF q= filter'),
@@ -530,44 +532,46 @@ function registerAbsenceEnhancements(server: McpServer, ctx: ToolContext): void 
   );
 }
 
+function resolveAssignmentId(
+  args: Record<string, unknown>,
+  items: unknown[],
+  action: string,
+): string {
+  const explicit = String(args.assignmentId ?? '');
+  if (explicit) return explicit;
+  if (items.length === 1) {
+    const id = (items[0] as { AssignmentId?: string })?.AssignmentId;
+    if (id) return id;
+  }
+  throw new Error(
+    `assignmentId is required for ${action} (refusing to guess among ${items.length} assignments)`,
+  );
+}
+
 function registerRecipesV06(server: McpServer, ctx: ToolContext): void {
   bindExecutor(ctx, 'hcm_recipe_transfer', async (args) => {
     const workerId = String(args.workerId);
     const body = (args.body ?? {}) as Record<string, unknown>;
     const worker = await ctx.client.getJson(`workers/${encodeURIComponent(workerId)}`);
     const asgList = await ctx.client.list('workerAssignments', {
-      q: `WorkerId=${workerId}`,
+      q: adfEquals('WorkerId', workerId),
       limit: 5,
     });
-    const asg = (asgList.items?.[0] ?? {}) as Record<string, unknown>;
-    const assignmentId = String(asg.AssignmentId ?? args.assignmentId ?? '');
-    let updated = null;
-    if (assignmentId) {
-      updated = await ctx.client.patchJson(
-        `workerAssignments/${encodeURIComponent(assignmentId)}`,
-        {
-          OrganizationId: body.OrganizationId ?? body.organizationId,
-          LocationId: body.LocationId ?? body.locationId,
-          JobId: body.JobId ?? body.jobId,
-          ActionCode: 'TRANSFER',
-          ...body,
-        },
-      );
-    }
-    return {
-      recipe: 'transfer',
-      workerId,
-      worker,
-      assignmentId,
-      updated,
-      unofficial: true,
-    };
+    const assignmentId = resolveAssignmentId(args, asgList.items ?? [], 'transfer');
+    const updated = await ctx.client.patchJson(`workerAssignments/${encodeURIComponent(assignmentId)}`, {
+      OrganizationId: body.OrganizationId ?? body.organizationId,
+      LocationId: body.LocationId ?? body.locationId,
+      JobId: body.JobId ?? body.jobId,
+      ActionCode: 'TRANSFER',
+      ...body,
+    });
+    return { recipe: 'transfer', workerId, worker, assignmentId, updated, unofficial: true };
   });
   server.registerTool(
     'hcm_recipe_transfer',
     {
       description:
-        'Recipe: transfer worker (patch assignment org/location/job). Approval-gated unless --write.',
+        'Recipe: transfer worker (patch assignment org/location/job). Requires assignmentId unless the worker has exactly one assignment. Approval-gated unless --write.',
       inputSchema: {
         workerId: z.string(),
         assignmentId: z.string().optional(),
@@ -581,28 +585,22 @@ function registerRecipesV06(server: McpServer, ctx: ToolContext): void {
   bindExecutor(ctx, 'hcm_recipe_terminate', async (args) => {
     const workerId = String(args.workerId);
     const asgList = await ctx.client.list('workerAssignments', {
-      q: `WorkerId=${workerId}`,
+      q: adfEquals('WorkerId', workerId),
       limit: 5,
     });
-    const asg = (asgList.items?.[0] ?? {}) as Record<string, unknown>;
-    const assignmentId = String(asg.AssignmentId ?? args.assignmentId ?? '');
-    let updated = null;
-    if (assignmentId) {
-      updated = await ctx.client.patchJson(
-        `workerAssignments/${encodeURIComponent(assignmentId)}`,
-        {
-          AssignmentStatusType: 'INACTIVE',
-          ActionCode: 'TERMINATION',
-          TerminationDate: args.terminationDate ?? new Date().toISOString().slice(0, 10),
-        },
-      );
-    }
+    const assignmentId = resolveAssignmentId(args, asgList.items ?? [], 'terminate');
+    const updated = await ctx.client.patchJson(`workerAssignments/${encodeURIComponent(assignmentId)}`, {
+      AssignmentStatusType: 'INACTIVE',
+      ActionCode: 'TERMINATION',
+      TerminationDate: args.terminationDate ?? new Date().toISOString().slice(0, 10),
+    });
     return { recipe: 'terminate', workerId, assignmentId, updated, unofficial: true };
   });
   server.registerTool(
     'hcm_recipe_terminate',
     {
-      description: 'Recipe: terminate (set assignment inactive). Approval-gated unless --write.',
+      description:
+        'Recipe: terminate (set assignment inactive). Requires assignmentId unless exactly one assignment. Not a full Fusion termination API. Approval-gated unless --write.',
       inputSchema: {
         workerId: z.string(),
         assignmentId: z.string().optional(),
@@ -616,30 +614,24 @@ function registerRecipesV06(server: McpServer, ctx: ToolContext): void {
   bindExecutor(ctx, 'hcm_recipe_promote', async (args) => {
     const workerId = String(args.workerId);
     const asgList = await ctx.client.list('workerAssignments', {
-      q: `WorkerId=${workerId}`,
+      q: adfEquals('WorkerId', workerId),
       limit: 5,
     });
-    const asg = (asgList.items?.[0] ?? {}) as Record<string, unknown>;
-    const assignmentId = String(asg.AssignmentId ?? args.assignmentId ?? '');
+    const assignmentId = resolveAssignmentId(args, asgList.items ?? [], 'promote');
     const body = (args.body ?? {}) as Record<string, unknown>;
-    let updated = null;
-    if (assignmentId) {
-      updated = await ctx.client.patchJson(
-        `workerAssignments/${encodeURIComponent(assignmentId)}`,
-        {
-          GradeId: body.GradeId ?? body.gradeId,
-          JobId: body.JobId ?? body.jobId,
-          ActionCode: 'PROMOTION',
-          ...body,
-        },
-      );
-    }
+    const updated = await ctx.client.patchJson(`workerAssignments/${encodeURIComponent(assignmentId)}`, {
+      GradeId: body.GradeId ?? body.gradeId,
+      JobId: body.JobId ?? body.jobId,
+      ActionCode: 'PROMOTION',
+      ...body,
+    });
     return { recipe: 'promote', workerId, assignmentId, updated, unofficial: true };
   });
   server.registerTool(
     'hcm_recipe_promote',
     {
-      description: 'Recipe: promote (grade/job change). Approval-gated unless --write.',
+      description:
+        'Recipe: promote (grade/job change). Requires assignmentId unless exactly one assignment. Approval-gated unless --write.',
       inputSchema: {
         workerId: z.string(),
         assignmentId: z.string().optional(),
@@ -839,11 +831,37 @@ function registerPlatformV06(server: McpServer, ctx: ToolContext): void {
       }, ctx, 'hcm_atom_cdc_status'),
   );
 
+  bindExecutor(ctx, 'hcm_refresh_allowlist_from_openapi', async (args) => {
+    let doc: unknown = args.document;
+    if (!doc && args.fetchFromTenant !== false) {
+      try {
+        doc = await ctx.client.getVersionRoot();
+      } catch {
+        doc = {
+          items: listAllowlistRoots().map((name) => ({ name })),
+          note: 'Fallback stub — pass document for real refresh',
+        };
+      }
+    }
+    if (!doc) doc = { items: [] };
+    const roots = extractRootsFromOpenApi(doc);
+    const diff = suggestAllowlistDiff(roots);
+    let merge: unknown = null;
+    if (args.apply !== false) {
+      merge = mergeAllowlistRoots(roots);
+    }
+    return {
+      diff,
+      merge,
+      allowlistSize: listAllowlistRoots().length,
+      unofficial: true,
+    };
+  });
   server.registerTool(
     'hcm_refresh_allowlist_from_openapi',
     {
       description:
-        'Pull tenant describe/OpenAPI JSON (or pass document) and merge safe roots into runtime allowlist. CE/AI stay blocked.',
+        'Pull tenant describe/OpenAPI JSON (or pass document) and merge safe roots into runtime allowlist. CE/AI stay blocked. Approval-gated.',
       inputSchema: {
         document: z.record(z.unknown()).optional().describe('Inline OpenAPI/ADF describe JSON'),
         fetchFromTenant: z.boolean().optional().describe('GET resources/ root from baseUrl'),
@@ -851,38 +869,7 @@ function registerPlatformV06(server: McpServer, ctx: ToolContext): void {
       },
       annotations: { readOnlyHint: false },
     },
-    async (args) => {
-      try {
-        let doc: unknown = args.document;
-        if (!doc && args.fetchFromTenant !== false) {
-          // Prefer explicit document; fetch attempt via rest get of version root may 404 on some pods
-          try {
-            doc = await ctx.client.getJson('');
-          } catch {
-            doc = {
-              items: listAllowlistRoots().map((name) => ({ name })),
-              note: 'Fallback stub — pass document for real refresh',
-            };
-          }
-        }
-        if (!doc) doc = { items: [] };
-        const roots = extractRootsFromOpenApi(doc);
-        const diff = suggestAllowlistDiff(roots);
-        let merge: unknown = null;
-        if (args.apply !== false) {
-          merge = mergeAllowlistRoots(roots);
-        }
-        recordAudit(ctx, 'hcm_refresh_allowlist_from_openapi', 'write', `roots=${roots.length}`);
-        return jsonResult({
-          diff,
-          merge,
-          allowlistSize: listAllowlistRoots().length,
-          unofficial: true,
-        });
-      } catch (e) {
-        return errorResult(e);
-      }
-    },
+    async (args) => gateWrite(ctx, 'hcm_refresh_allowlist_from_openapi', args as Record<string, unknown>),
   );
 
   server.registerTool(
@@ -914,32 +901,36 @@ function registerPlatformV06(server: McpServer, ctx: ToolContext): void {
       }, ctx, 'hcm_export_approval_audit'),
   );
 
-  bindExecutor(ctx, 'hcm_bulk_approve_writes', async (args) => {
-    const ids = (args.approvalIds as string[]) ?? [];
-    const results: unknown[] = [];
-    for (const id of ids) {
-      try {
-        const { intent, result } = await ctx.approvals.approve(id, async (tool, a) => {
-          const fn = ctx.executors.get(tool);
-          if (!fn) throw new Error(`No executor for ${tool}`);
-          return fn(a);
-        });
-        results.push({ approval_id: id, ok: true, tool: intent.toolName, result });
-      } catch (e) {
-        results.push({ approval_id: id, ok: false, error: e instanceof Error ? e.message : String(e) });
-      }
-    }
-    return { bulk: true, results };
-  });
   server.registerTool(
     'hcm_bulk_approve_writes',
     {
       description:
-        'Bulk-approve pending write intents by approval_id list (Approval UI). Still gated as a write unless --write.',
-      inputSchema: { approvalIds: z.array(z.string()).min(1) },
+        'HUMAN/OPS ONLY. Bulk-approve pending write intents. Requires approval_token. Not queued as a write.',
+      inputSchema: { approvalIds: z.array(z.string()).min(1), approval_token: z.string() },
       annotations: { readOnlyHint: false },
     },
-    async (args) => gateWrite(ctx, 'hcm_bulk_approve_writes', args),
+    async (args) => {
+      try {
+        requireApprovalToken(ctx, args as Record<string, unknown>);
+        const ids = (args.approvalIds as string[]) ?? [];
+        const results: unknown[] = [];
+        for (const id of ids) {
+          try {
+            const { intent, result } = await ctx.approvals.approve(id, async (tool, a) => {
+              const fn = ctx.executors.get(tool);
+              if (!fn) throw new Error(`No executor for ${tool}`);
+              return fn(a);
+            });
+            results.push({ approval_id: id, ok: true, tool: intent.toolName, result });
+          } catch (e) {
+            results.push({ approval_id: id, ok: false, error: e instanceof Error ? e.message : String(e) });
+          }
+        }
+        return jsonResult({ bulk: true, results });
+      } catch (e) {
+        return errorResult(e);
+      }
+    },
   );
 
   server.registerTool(

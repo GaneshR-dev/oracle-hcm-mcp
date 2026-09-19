@@ -2,6 +2,23 @@
 
 > Not an Oracle product. Priorities may change. Perfect ADF coverage is **not** a goal.
 
+## Shipped in v0.7
+
+| # | Capability | Notes |
+|---|------------|--------|
+| 1 | **Split-principal approvals** | `ORACLE_HCM_APPROVAL_TOKEN` never returned by tools |
+| 2 | **HTTP/gRPC bearer** | Fail-closed; `GET /health` public |
+| 3 | **Path canonicalization** | Decode, reject `..` / `%2e%2e` / schemes before allowlist |
+| 4 | **SENSITIVE resource roots** | `hcm_rest_get` cannot bypass payslip/bank gates |
+| 5 | **Profiles cannot enable writes** | `writeMode` on a profile is ignored |
+| 6 | **Fusion REST headers** | `REST-Framework-Version`, `If-Match` |
+| 7 | **ADF q= quoting** | `adfEquals()` |
+| 8 | **Approval UI** | XSS-safe rendering + bearer token + REST approve |
+| 9 | **Setup UI** | CSRF Origin + http(s)-only URLs |
+| 10 | **Webhook replay headers** | Timestamp + nonce required when signing |
+| 11 | **dotenv** | `.env` / `.env.local` without overriding process.env |
+| 12 | **CI** | typecheck + vitest |
+
 ## Shipped in v0.6
 
 | # | Capability | Notes |

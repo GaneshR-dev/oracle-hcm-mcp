@@ -38,6 +38,8 @@ function cfg(overrides: Partial<Config> = {}): Config {
     authMode: 'basic',
     username: 'demo',
     password: 'demo',
+    approvalToken: 'test-approval-token',
+    httpToken: 'test-http-token',
     approvalTtlMs: 60_000,
     approvalStore: 'memory',
     transport: 'stdio',
@@ -98,7 +100,16 @@ describe('v0.4 Atom CDC', () => {
       );
       expect(entry.entryId).toBe('AE1');
 
-      await client.callTool({ name: 'hcm_atom_reset_checkpoint', arguments: {} });
+      const resetPending = parse(
+        await client.callTool({ name: 'hcm_atom_reset_checkpoint', arguments: {} }),
+      );
+      expect(resetPending.pending_approval).toBe(true);
+      parse(
+        await client.callTool({
+          name: 'hcm_approve_write',
+          arguments: { approval_id: resetPending.approval_id, approval_token: 'test-approval-token' },
+        }),
+      );
 
       const poll1 = parse(
         await client.callTool({
@@ -188,6 +199,8 @@ describe('v0.4 webhook HMAC', () => {
       headers: {
         'Content-Type': 'application/json',
         'X-HCM-Signature': sig,
+        'X-HCM-Timestamp': new Date().toISOString(),
+        'X-HCM-Nonce': 'v04-hmac-nonce-1',
       },
       body,
     });
@@ -251,7 +264,7 @@ describe('v0.4 multi-node approvals (file store)', () => {
       const approved = parse(
         await client2.callTool({
           name: 'hcm_approve_write',
-          arguments: { approval_id: pending.approval_id },
+          arguments: { approval_id: pending.approval_id, approval_token: 'test-approval-token' },
         }),
       );
       expect(approved.approved).toBe(true);
@@ -318,17 +331,10 @@ describe('v0.4 ADF finders', () => {
 describe('v0.4 payslip field parity', () => {
   it('returns richer Fusion-shaped payslip under sensitive gate', async () => {
     await withClient(cfg({ sensitiveEnabled: true }), async (client) => {
-      const pending = parse(
+      const ps = parse(
         await client.callTool({ name: 'hcm_get_payslip', arguments: { payslipId: 'PS1' } }),
       );
-      expect(pending.pending_approval).toBe(true);
-      const approved = parse(
-        await client.callTool({
-          name: 'hcm_approve_write',
-          arguments: { approval_id: pending.approval_id },
-        }),
-      );
-      const ps = approved.result;
+      expect(ps.pending_approval).toBeUndefined();
       expect(ps.PayslipId).toBe('PS1');
       expect(ps.GrossEarnings).toBe(10500);
       expect(ps.TotalDeductions).toBe(2000);

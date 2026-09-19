@@ -10,11 +10,12 @@
   <main class="wrap">
     <header>
       <h1>Pending HCM write approvals</h1>
-      <p class="sub">Unofficial · localhost only · not an Oracle product · v0.6</p>
+      <p class="sub">Unofficial · localhost only · not an Oracle product · v0.7</p>
     </header>
-    <aside class="disclaimer">Approve / deny only mutations you understand. Credentials and Fusion RBAC still apply. Under <code>--write</code> this queue is unused.</aside>
+    <aside class="disclaimer">Approve / deny only mutations you understand. Credentials and Fusion RBAC still apply. Under <code>--write</code> this queue is unused. The approval token is a <strong>separate principal</strong> — it is never returned by MCP tools.</aside>
     <div class="row">
-      <label>MCP HTTP base <input id="base" value="http://127.0.0.1:8788" /></label>
+      <label>MCP HTTP base <input id="base" value="http://127.0.0.1:8788" autocomplete="off" /></label>
+      <label>Bearer / approval token <input id="token" type="password" placeholder="ORACLE_HCM_HTTP_TOKEN" autocomplete="off" /></label>
       <label>Domain
         <select id="domain">
           <option value="">All domains</option>

@@ -8,6 +8,7 @@ import type { Config } from '../../config.js';
 import { redactDeep } from '../../platform/redact.js';
 import type { WebhookReceiver } from '../../platform/webhookStub.js';
 import type { CheckpointStore } from '../../platform/atomCdc.js';
+import { safeEqual } from '../../policy/cryptoSafe.js';
 
 export type WriteExecutor = (args: Record<string, unknown>) => Promise<unknown>;
 
@@ -88,17 +89,34 @@ export function recordAudit(
 }
 
 /**
+ * Approvals are a separate principal. The agent that queued the write does not
+ * receive this token in any tool result; a human/ops client must pass it.
+ */
+export function requireApprovalToken(ctx: ToolContext, args: Record<string, unknown>): void {
+  const expected = ctx.config.approvalToken;
+  if (!expected) {
+    throw new Error(
+      'Approvals are locked: set ORACLE_HCM_APPROVAL_TOKEN (printed on stderr at startup if generated). This token is never returned by tools.',
+    );
+  }
+  const provided = String(args.approval_token ?? args.approvalToken ?? '');
+  if (!provided || !safeEqual(provided, expected)) {
+    throw new Error(
+      'Invalid or missing approval_token. Pass the human/ops token from ORACLE_HCM_APPROVAL_TOKEN — it is never included in pending_approval payloads.',
+    );
+  }
+}
+
+/**
  * Gate write tools.
  *
  * **`--write` / ORACLE_HCM_WRITE=1 bypasses everything**: no approval queue,
  * no SENSITIVE gate, mutations run immediately (including payslip/bank/comp).
  *
  * Default (approval) mode:
- * - Sensitive tools need ORACLE_HCM_SENSITIVE=1, then queue for approval.
+ * - Sensitive reads need ORACLE_HCM_SENSITIVE=1, then execute (resource-root gated too).
+ * - Sensitive writes need the flag, then queue for a *different principal* (approval token).
  * - Other writes queue for approval.
- *
- * ORACLE_HCM_SENSITIVE_WRITE is retained for docs/compat but is unused when
- * writeMode is already on (writeMode alone is sufficient).
  */
 export async function gateWrite(
   ctx: ToolContext,
@@ -109,7 +127,6 @@ export async function gateWrite(
     const exec = ctx.executors.get(toolName);
     if (!exec) throw new Error(`No executor for ${toolName}`);
 
-    // --write / ORACLE_HCM_WRITE=1: bypass approval + sensitive gates entirely
     if (ctx.writeMode) {
       const result = await exec(args);
       audit(
@@ -129,6 +146,11 @@ export async function gateWrite(
           ),
         );
       }
+      if (!isWriteTool(toolName)) {
+        const result = await exec(args);
+        audit(ctx, toolName, 'sensitive', summarizeMutation(toolName, args));
+        return jsonResult(result);
+      }
       const summary = summarizeMutation(toolName, args);
       const intent = ctx.approvals.create(toolName, args, summary);
       audit(ctx, toolName, 'sensitive', `pending:${intent.approvalId}`);
@@ -140,7 +162,7 @@ export async function gateWrite(
         summary: intent.summary,
         expires_at: new Date(intent.expiresAt).toISOString(),
         message:
-          'Sensitive tool requires approval in default mode. Use hcm_approve_write, or restart with --write / ORACLE_HCM_WRITE=1 to bypass all gates.',
+          'Sensitive write queued. Approve out-of-band with ORACLE_HCM_APPROVAL_TOKEN (Approval UI or hcm_approve_write). The token is never returned here. Or use --write to bypass.',
       });
     }
 
@@ -160,7 +182,7 @@ export async function gateWrite(
       summary: intent.summary,
       expires_at: new Date(intent.expiresAt).toISOString(),
       message:
-        'Write requires human approval. Call hcm_approve_write with approval_id, or hcm_deny_write to cancel. Or use --write / ORACLE_HCM_WRITE=1 to bypass.',
+        'Write queued for a human/ops principal. Approve via Approval UI (HTTP + bearer token) or hcm_approve_write with approval_token=ORACLE_HCM_APPROVAL_TOKEN. The same agent session does not receive this token.',
     });
   } catch (err) {
     return errorResult(err);

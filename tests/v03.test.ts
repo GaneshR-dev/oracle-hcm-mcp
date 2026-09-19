@@ -23,6 +23,8 @@ function cfg(overrides: Partial<Config> = {}): Config {
     authMode: 'basic',
     username: 'demo',
     password: 'demo',
+    approvalToken: 'test-approval-token',
+    httpToken: 'test-http-token',
     approvalTtlMs: 60_000,
     approvalStore: 'memory',
     transport: 'stdio',
@@ -103,7 +105,7 @@ describe('v0.3 tools against dummy', () => {
       const approved = parse(
         await client.callTool({
           name: 'hcm_approve_write',
-          arguments: { approval_id: pending.approval_id },
+          arguments: { approval_id: pending.approval_id, approval_token: 'test-approval-token' },
         }),
       );
       expect(approved.approved).toBe(true);
@@ -120,22 +122,14 @@ describe('v0.3 tools against dummy', () => {
     });
   });
 
-  it('sensitive payslip pending with sensitive flag', async () => {
+  it('sensitive payslip executes with sensitive flag (reads are not queued)', async () => {
     await withClient(cfg({ sensitiveEnabled: true }), async (client) => {
-      const pending = parse(
+      const ps = parse(
         await client.callTool({ name: 'hcm_get_payslip', arguments: { payslipId: 'PS1' } }),
       );
-      expect(pending.pending_approval).toBe(true);
-      expect(pending.sensitive).toBe(true);
-      const approved = parse(
-        await client.callTool({
-          name: 'hcm_approve_write',
-          arguments: { approval_id: pending.approval_id },
-        }),
-      );
-      expect(approved.result.PayslipId).toBe('PS1');
-      // redaction masks account-like fields elsewhere; payslip net pay remains
-      expect(approved.result.NetPay).toBe(8500);
+      expect(ps.pending_approval).toBeUndefined();
+      expect(ps.PayslipId).toBe('PS1');
+      expect(ps.NetPay).toBe(8500);
     });
   });
 

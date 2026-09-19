@@ -31,6 +31,8 @@ function cfg(overrides: Partial<Config> = {}): Config {
     authMode: 'basic',
     username: 'demo',
     password: 'demo',
+    approvalToken: 'test-approval-token',
+    httpToken: 'test-http-token',
     approvalTtlMs: 60_000,
     approvalStore: 'memory',
     transport: 'stdio',
@@ -90,8 +92,15 @@ describe('v0.5 smoke + profiles', () => {
     await withClient(cfg({ profilesPath }), async (c) => {
       const listed = parse(await c.callTool({ name: 'hcm_list_profiles', arguments: {} }));
       expect(listed.profiles.length).toBeGreaterThanOrEqual(3);
-      const sw = parse(await c.callTool({ name: 'hcm_switch_profile', arguments: { name: 'sandbox', persist: true } }));
-      expect(sw.active).toBe('sandbox');
+      const pending = parse(await c.callTool({ name: 'hcm_switch_profile', arguments: { name: 'sandbox', persist: true } }));
+      expect(pending.pending_approval).toBe(true);
+      const sw = parse(
+        await c.callTool({
+          name: 'hcm_approve_write',
+          arguments: { approval_id: pending.approval_id, approval_token: 'test-approval-token' },
+        }),
+      );
+      expect(sw.result.active).toBe('sandbox');
       const store = loadProfileStore(profilesPath);
       expect(store.active).toBe('sandbox');
     });
@@ -271,16 +280,22 @@ describe('v0.5 redaction audit + bulk preview + webhook rotate', () => {
     const port = Number(new URL(url).port);
     wh.rotateSecret('new-secret-value', true);
     const body = JSON.stringify({ hello: 'world' });
+    const replay = (secret, nonce) => ({
+      'Content-Type': 'application/json',
+      'X-HCM-Signature': signWebhookBody(secret, body),
+      'X-HCM-Timestamp': new Date().toISOString(),
+      'X-HCM-Nonce': nonce,
+    });
     // old still works
     let res = await fetch(`http://127.0.0.1:${port}/webhook`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-HCM-Signature': signWebhookBody('old-secret-value', body) },
+      headers: replay('old-secret-value', 'rotate-nonce-old'),
       body,
     });
     expect(res.status).toBe(202);
     res = await fetch(`http://127.0.0.1:${port}/webhook`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-HCM-Signature': signWebhookBody('new-secret-value', body) },
+      headers: replay('new-secret-value', 'rotate-nonce-new'),
       body,
     });
     expect(res.status).toBe(202);

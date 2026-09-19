@@ -10,6 +10,7 @@ import protoLoader from '@grpc/proto-loader';
 import type { Config } from '../config.js';
 import { createMcpServer, createToolContext } from '../mcp/server.js';
 import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
+import { pickBearerOrHeader, safeEqual } from '../policy/cryptoSafe.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -102,11 +103,27 @@ export async function startGrpc(cfg: Config, port: number): Promise<GrpcTranspor
   await bridge.start();
 
   const grpcServer = new grpc.Server();
+  const tokenOk = (metadata: grpc.Metadata): boolean => {
+    if (cfg.httpAuthRequired === false) return true;
+    const expected = cfg.httpToken ?? cfg.approvalToken;
+    if (!expected) return false;
+    const auth = metadata.get('authorization')[0];
+    const extra = metadata.get('x-hcm-token')[0];
+    const provided = pickBearerOrHeader(
+      typeof auth === 'string' ? auth : undefined,
+      typeof extra === 'string' ? extra : extra ? extra.toString() : undefined,
+    );
+    return Boolean(provided && safeEqual(provided, expected));
+  };
   grpcServer.addService(loaded.mcpbridge.McpBridge.service, {
     Call: async (
       call: grpc.ServerUnaryCall<{ json_rpc: string }, { json_rpc: string }>,
       cb: grpc.sendUnaryData<{ json_rpc: string }>,
     ) => {
+      if (!tokenOk(call.metadata)) {
+        cb({ code: grpc.status.UNAUTHENTICATED, message: 'Missing or invalid x-hcm-token' });
+        return;
+      }
       try {
         const out = await bridge.call(call.request.json_rpc);
         cb(null, { json_rpc: out });
@@ -118,6 +135,10 @@ export async function startGrpc(cfg: Config, port: number): Promise<GrpcTranspor
       }
     },
     Stream: (call: grpc.ServerDuplexStream<{ json_rpc: string }, { json_rpc: string }>) => {
+      if (!tokenOk(call.metadata)) {
+        call.destroy(new Error('UNAUTHENTICATED'));
+        return;
+      }
       call.on('data', async (req: { json_rpc: string }) => {
         try {
           const out = await bridge.call(req.json_rpc);
@@ -160,7 +181,7 @@ export async function startGrpc(cfg: Config, port: number): Promise<GrpcTranspor
 }
 
 /** Helper for tests / scripts: unary JSON-RPC via gRPC Call */
-export async function createGrpcClient(port: number) {
+export async function createGrpcClient(port: number, token?: string) {
   const protoPath = path.resolve(__dirname, '../../proto/mcp_bridge.proto');
   const packageDef = protoLoader.loadSync(protoPath, {
     keepCase: true,
@@ -177,6 +198,7 @@ export async function createGrpcClient(port: number) {
       ) => {
         Call: (
           req: { json_rpc: string },
+          metadata: grpc.Metadata,
           cb: (err: grpc.ServiceError | null, res: { json_rpc: string }) => void,
         ) => void;
         close: () => void;
@@ -187,10 +209,15 @@ export async function createGrpcClient(port: number) {
     `127.0.0.1:${port}`,
     grpc.credentials.createInsecure(),
   );
+  const md = new grpc.Metadata();
+  if (token) {
+    md.set('authorization', `Bearer ${token}`);
+    md.set('x-hcm-token', token);
+  }
   return {
     call: (msg: unknown) =>
       new Promise<unknown>((resolve, reject) => {
-        client.Call({ json_rpc: JSON.stringify(msg) }, (err, res) => {
+        client.Call({ json_rpc: JSON.stringify(msg) }, md, (err, res) => {
           if (err) reject(err);
           else resolve(JSON.parse(res.json_rpc));
         });

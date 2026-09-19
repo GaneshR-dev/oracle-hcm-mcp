@@ -23,6 +23,8 @@ function testConfig(overrides: Partial<Config> = {}): Config {
     authMode: 'basic',
     username: 'demo',
     password: 'demo',
+    approvalToken: 'test-approval-token',
+    httpToken: 'test-http-token',
     approvalTtlMs: 60_000,
     approvalStore: 'memory',
     transport: 'stdio',
@@ -128,7 +130,7 @@ describe('MCP E2E approval mode', () => {
       const approved = parseTool(
         await client.callTool({
           name: 'hcm_approve_write',
-          arguments: { approval_id: pending.approval_id },
+          arguments: { approval_id: pending.approval_id, approval_token: 'test-approval-token' },
         }),
       );
       expect(approved.approved).toBe(true);
@@ -147,7 +149,7 @@ describe('MCP E2E approval mode', () => {
       const denied = parseTool(
         await client.callTool({
           name: 'hcm_deny_write',
-          arguments: { approval_id: pending.approval_id },
+          arguments: { approval_id: pending.approval_id, approval_token: 'test-approval-token' },
         }),
       );
       expect(denied.denied).toBe(true);

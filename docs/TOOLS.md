@@ -72,7 +72,7 @@ Organizations, locations, jobs, grades search/get;
 
 ## Approval
 
-`hcm_list_pending_approvals`, `hcm_approve_write`, `hcm_deny_write`
+`hcm_list_pending_approvals`, `hcm_approve_write` (`approval_token` required), `hcm_deny_write` (`approval_token` required)
 (always registered; under `--write` approvals are unused — mutations run immediately including sensitive)
 
 

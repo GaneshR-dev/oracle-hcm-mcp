@@ -4,8 +4,11 @@ import {
   isAllowlistedPath,
   isBlockedPath,
   assertAllowlisted,
+  canonicalizeResourcePath,
 } from '../src/policy/allowlist.js';
 import { ApprovalStore, summarizeMutation } from '../src/policy/approval.js';
+import { adfEquals } from '../src/policy/adf.js';
+import { isSensitiveRoot } from '../src/policy/sensitive.js';
 
 describe('classify', () => {
   it('classifies known reads', () => {
@@ -57,6 +60,8 @@ describe('allowlist', () => {
     expect(isAllowlistedPath('talentPersonProfiles')).toBe(true);
     expect(isAllowlistedPath('payrollRelationships')).toBe(true);
     expect(isAllowlistedPath('workerAssignments')).toBe(true);
+    expect(isAllowlistedPath('benefitEnrollments')).toBe(true);
+    expect(isAllowlistedPath('learningEnrollments')).toBe(true);
   });
 
   it('keeps legacy aliases allowlisted', () => {
@@ -69,11 +74,26 @@ describe('allowlist', () => {
     expect(isBlockedPath('workers/../ce/foo')).toBe(true);
     expect(isBlockedPath('internal/oracleInternal')).toBe(true);
     expect(isAllowlistedPath('ce/generativeAi')).toBe(false);
+    expect(isBlockedPath('llm')).toBe(true);
+    expect(isBlockedPath('workers/llm/x')).toBe(true);
+    expect(isBlockedPath('benefitEnrollments')).toBe(false);
   });
 
   it('assertAllowlisted throws on bad paths', () => {
     expect(() => assertAllowlisted('ce/ai/embed')).toThrow(/blocked/i);
     expect(() => assertAllowlisted('payrollSomething')).toThrow(/allowlist/i);
+  });
+
+  it('canonicalize rejects traversal and schemes', () => {
+    expect(() => canonicalizeResourcePath('workers/../ce')).toThrow(/traversal/i);
+    expect(() => canonicalizeResourcePath('%2e%2e/ce')).toThrow(/traversal/i);
+    expect(() => canonicalizeResourcePath('https://x/workers')).toThrow(/scheme/i);
+    expect(isSensitiveRoot('payslips')).toBe(true);
+    expect(isSensitiveRoot('workers')).toBe(false);
+  });
+
+  it('adfEquals quotes values', () => {
+    expect(adfEquals('PersonNumber', "O'Brien")).toBe("PersonNumber='O''Brien'");
   });
 });
 

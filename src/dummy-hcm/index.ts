@@ -66,7 +66,7 @@ function bodyNum(body: unknown): string {
 export function createDummyApp(store?: Store): express.Express {
   const s = store ?? seedStore();
   const app = express();
-  app.use(express.json({ limit: '2mb' }));
+  app.use(express.json({ limit: '2mb', type: ['json', 'application/vnd.oracle.adf.resourceitem+json'] }));
 
   app.get('/health', (_req, res) => {
     res.json({ ok: true, service: 'dummy-hcm', unofficial: true });

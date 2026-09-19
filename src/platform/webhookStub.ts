@@ -10,6 +10,7 @@ import http from 'node:http';
 import https from 'node:https';
 import fs from 'node:fs';
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { pickBearerOrHeader, safeEqual } from '../policy/cryptoSafe.js';
 
 export type WebhookEvent = {
   id: string;
@@ -31,6 +32,8 @@ export type WebhookReceiverOptions = {
   tlsKeyPath?: string;
   tlsCertPath?: string;
   tlsCaPath?: string;
+  /** Token required for GET /webhook/events */
+  adminToken?: string;
 };
 
 export function signWebhookBody(secret: string, rawBody: string | Buffer): string {
@@ -107,6 +110,7 @@ export class WebhookReceiver {
   /** Max age for X-HCM-Timestamp (default 5 min) */
   private replayWindowMs: number;
   private replayProtection: boolean;
+  private adminToken?: string;
 
   constructor(opts: WebhookReceiverOptions = {}) {
     this.secrets = resolveSecrets(opts);
@@ -122,19 +126,21 @@ export class WebhookReceiver {
     this.replayProtection =
       process.env.ORACLE_HCM_WEBHOOK_REPLAY_PROTECTION !== '0' &&
       process.env.ORACLE_HCM_WEBHOOK_REPLAY_PROTECTION !== 'false';
+    this.adminToken = opts.adminToken ?? process.env.ORACLE_HCM_HTTP_TOKEN ?? process.env.ORACLE_HCM_APPROVAL_TOKEN;
   }
 
   /** Check timestamp + nonce replay; returns error message or null if ok. */
   checkReplay(headers: http.IncomingHttpHeaders): string | null {
     if (!this.replayProtection) return null;
+    // Unsigned local stub: do not require replay headers
+    if (!this.requireSignature && this.secrets.length === 0) return null;
     const tsRaw = headers['x-hcm-timestamp'] ?? headers['x-timestamp'];
     const nonceRaw = headers['x-hcm-nonce'] ?? headers['x-nonce'];
     const ts = Array.isArray(tsRaw) ? tsRaw[0] : tsRaw;
     const nonce = Array.isArray(nonceRaw) ? nonceRaw[0] : nonceRaw;
-    // If neither present, allow (compat) unless require both via env
-    const requireBoth = process.env.ORACLE_HCM_WEBHOOK_REQUIRE_REPLAY_HEADERS === '1';
-    if (!ts && !nonce) {
-      return requireBoth ? 'Missing X-HCM-Timestamp and X-HCM-Nonce' : null;
+    // When signing is on, timestamp + nonce are required (no silent replay).
+    if (!ts || !nonce) {
+      return 'Missing X-HCM-Timestamp and/or X-HCM-Nonce (required when webhook signing / replay protection is on)';
     }
     if (ts) {
       const t = Date.parse(ts) || Number(ts);
@@ -195,6 +201,15 @@ export class WebhookReceiver {
 
     const handler = (req: http.IncomingMessage, res: http.ServerResponse) => {
       if (req.method === 'GET' && req.url?.startsWith('/webhook/events')) {
+        const provided = pickBearerOrHeader(req.headers.authorization, req.headers['x-hcm-token']);
+        const ok =
+          (this.adminToken && provided && safeEqual(provided, this.adminToken)) ||
+          (this.secrets.length > 0 && provided && this.secrets.some((s) => safeEqual(provided, s)));
+        if (!ok) {
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Unauthorized' }));
+          return;
+        }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(
           JSON.stringify({
@@ -225,7 +240,16 @@ export class WebhookReceiver {
       }
       if (req.method === 'POST' && (req.url === '/webhook' || req.url?.startsWith('/webhook/'))) {
         const chunks: Buffer[] = [];
-        req.on('data', (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
+        let size = 0;
+        req.on('data', (c) => {
+          const buf = Buffer.isBuffer(c) ? c : Buffer.from(c);
+          size += buf.length;
+          if (size > 1024 * 1024) {
+            req.destroy();
+            return;
+          }
+          chunks.push(buf);
+        });
         req.on('end', () => {
           const rawBuf = Buffer.concat(chunks);
           const raw = rawBuf.toString('utf8');
@@ -307,9 +331,12 @@ export class WebhookReceiver {
         key: fs.readFileSync(this.tlsKeyPath),
         cert: fs.readFileSync(this.tlsCertPath),
         requestCert: true,
-        rejectUnauthorized: Boolean(this.tlsCaPath),
+        rejectUnauthorized: true,
       };
-      if (this.tlsCaPath) tlsOpts.ca = fs.readFileSync(this.tlsCaPath);
+      if (!this.tlsCaPath) {
+        throw new Error('mTLS requires ORACLE_HCM_WEBHOOK_TLS_CA so unauthorized clients are rejected');
+      }
+      tlsOpts.ca = fs.readFileSync(this.tlsCaPath);
       this.server = https.createServer(tlsOpts, handler);
     } else {
       this.server = http.createServer(handler);

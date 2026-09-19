@@ -31,6 +31,8 @@ function mcpConfig(overrides: Partial<Config> = {}): Config {
     authMode: 'basic',
     username: 'demo',
     password: 'demo',
+    approvalToken: 'test-approval-token',
+    httpToken: 'test-http-token',
     approvalTtlMs: 120_000,
     approvalStore: 'file',
     approvalStorePath: approvalPath,
@@ -78,12 +80,13 @@ describe('Streamable HTTP /mcp e2e', () => {
     const body = await res.json();
     expect(body.ok).toBe(true);
     expect(body.unofficial).toBe(true);
-    expect(body.version).toBe('0.6.0');
+    expect(body.version).toBe('0.7.0');
   });
 
   it('lists tools, health, search workers, approval path', async () => {
     const transport = new StreamableHTTPClientTransport(
       new URL(`http://127.0.0.1:${httpHandle.port}/mcp`),
+      { requestInit: { headers: { Authorization: 'Bearer test-http-token' } } },
     );
     const client = new Client({ name: 'http-e2e', version: '0.5.0' });
     await client.connect(transport);
@@ -113,7 +116,7 @@ describe('Streamable HTTP /mcp e2e', () => {
       expect(pending.pending_approval).toBe(true);
 
       // HTTP /approvals mirrors shared store
-      const appr = await fetch(`http://127.0.0.1:${httpHandle.port}/approvals`);
+      const appr = await fetch(`http://127.0.0.1:${httpHandle.port}/approvals`, { headers: { Authorization: 'Bearer test-http-token' } });
       const apprBody = await appr.json();
       expect(apprBody.pending.some((p: { approval_id: string }) => p.approval_id === pending.approval_id)).toBe(
         true,
@@ -122,7 +125,7 @@ describe('Streamable HTTP /mcp e2e', () => {
       const approved = parseTool(
         await client.callTool({
           name: 'hcm_approve_write',
-          arguments: { approval_id: pending.approval_id },
+          arguments: { approval_id: pending.approval_id, approval_token: 'test-approval-token' },
         }),
       );
       expect(approved.approved).toBe(true);
@@ -135,7 +138,7 @@ describe('Streamable HTTP /mcp e2e', () => {
 
 describe('gRPC McpBridge e2e', () => {
   it('initialize + tools/list + curated calls + approval', async () => {
-    const grpc = await createGrpcClient(grpcHandle.port);
+    const grpc = await createGrpcClient(grpcHandle.port, 'test-http-token');
     try {
       let id = 1;
       const init = (await grpc.call({
@@ -149,7 +152,7 @@ describe('gRPC McpBridge e2e', () => {
         },
       })) as { result?: { serverInfo?: { name: string; version: string } } };
       expect(init.result?.serverInfo?.name).toBe('oracle-hcm-mcp');
-      expect(init.result?.serverInfo?.version).toBe('0.6.0');
+      expect(init.result?.serverInfo?.version).toBe('0.7.0');
 
       // notifications/initialized (no id)
       await grpc.call({
@@ -207,7 +210,7 @@ describe('gRPC McpBridge e2e', () => {
         method: 'tools/call',
         params: {
           name: 'hcm_deny_write',
-          arguments: { approval_id: pendingBody.approval_id },
+          arguments: { approval_id: pendingBody.approval_id, approval_token: 'test-approval-token' },
         },
       })) as { result?: { content: { type: string; text?: string }[] } };
       const deniedBody = JSON.parse(denied.result?.content?.find((c) => c.type === 'text')?.text ?? '{}');

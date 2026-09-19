@@ -27,6 +27,7 @@ type IntentMap = Record<string, PendingIntent>;
 export interface ApprovalBackend {
   load(): IntentMap;
   save(map: IntentMap): void;
+  transact?<T>(fn: (map: IntentMap) => T): T;
   readonly kind: string;
   readonly path?: string;
 }
@@ -40,6 +41,12 @@ class MemoryBackend implements ApprovalBackend {
   save(map: IntentMap): void {
     this.data = { ...map };
   }
+  transact<T>(fn: (map: IntentMap) => T): T {
+    const map = { ...this.data };
+    const result = fn(map);
+    this.data = { ...map };
+    return result;
+  }
 }
 
 class FileBackend implements ApprovalBackend {
@@ -50,6 +57,25 @@ class FileBackend implements ApprovalBackend {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
   }
   load(): IntentMap {
+    let out: IntentMap = {};
+    this.withLock(() => {
+      out = this.readUnlocked();
+    });
+    return out;
+  }
+  save(map: IntentMap): void {
+    this.withLock(() => this.writeUnlocked(map));
+  }
+  transact<T>(fn: (map: IntentMap) => T): T {
+    let result!: T;
+    this.withLock(() => {
+      const map = this.readUnlocked();
+      result = fn(map);
+      this.writeUnlocked(map);
+    });
+    return result;
+  }
+  private readUnlocked(): IntentMap {
     try {
       if (!fs.existsSync(this.path)) return {};
       const raw = fs.readFileSync(this.path, 'utf8');
@@ -58,10 +84,41 @@ class FileBackend implements ApprovalBackend {
       return {};
     }
   }
-  save(map: IntentMap): void {
+  private writeUnlocked(map: IntentMap): void {
     const tmp = `${this.path}.${process.pid}.${Date.now()}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(map, null, 2), 'utf8');
+    fs.writeFileSync(tmp, JSON.stringify(map, null, 2), { encoding: 'utf8', mode: 0o600 });
     fs.renameSync(tmp, this.path);
+    try {
+      fs.chmodSync(this.path, 0o600);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  private withLock(fn: () => void): void {
+    const lock = `${this.path}.lock`;
+    const deadline = Date.now() + 5000;
+    for (;;) {
+      try {
+        const fd = fs.openSync(lock, 'wx');
+        try {
+          fn();
+        } finally {
+          fs.closeSync(fd);
+          try {
+            fs.unlinkSync(lock);
+          } catch {
+            /* ignore */
+          }
+        }
+        return;
+      } catch (e) {
+        const code = (e as NodeJS.ErrnoException).code;
+        if (code !== 'EEXIST') throw e;
+        if (Date.now() > deadline) throw new Error('Approval file store lock timeout');
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20);
+      }
+    }
   }
 }
 
@@ -115,10 +172,21 @@ class SqliteBackend implements ApprovalBackend {
   }
 
   save(map: IntentMap): void {
-    this.db.exec('DELETE FROM approvals');
-    const stmt = this.db.prepare('INSERT INTO approvals (id, payload) VALUES (?, ?)');
-    for (const [id, intent] of Object.entries(map)) {
-      stmt.run(id, JSON.stringify(intent));
+    this.db.exec('BEGIN');
+    try {
+      this.db.exec('DELETE FROM approvals');
+      const stmt = this.db.prepare('INSERT INTO approvals (id, payload) VALUES (?, ?)');
+      for (const [id, intent] of Object.entries(map)) {
+        stmt.run(id, JSON.stringify(intent));
+      }
+      this.db.exec('COMMIT');
+    } catch (e) {
+      try {
+        this.db.exec('ROLLBACK');
+      } catch {
+        /* ignore */
+      }
+      throw e;
     }
   }
 }
@@ -184,6 +252,12 @@ export class ApprovalStore {
   }
 
   private withMap<T>(fn: (map: IntentMap) => T): T {
+    if (this.backend.transact) {
+      return this.backend.transact((map) => {
+        this.purgeExpiredIn(map);
+        return fn(map);
+      });
+    }
     const map = this.backend.load();
     this.purgeExpiredIn(map);
     const result = fn(map);
@@ -295,7 +369,8 @@ export function createApprovalStore(
 }
 
 export function summarizeMutation(toolName: string, args: Record<string, unknown>): string {
-  const keys = Object.keys(args).slice(0, 8);
+  const secret = /token|secret|password|authorization|bearer/i;
+  const keys = Object.keys(args).filter((k) => !secret.test(k)).slice(0, 8);
   const brief = keys
     .map((k) => {
       const v = args[k];

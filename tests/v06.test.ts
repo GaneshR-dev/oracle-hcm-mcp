@@ -29,6 +29,8 @@ function cfg(overrides: Partial<Config> = {}): Config {
     authMode: 'basic',
     username: 'demo',
     password: 'demo',
+    approvalToken: 'test-approval-token',
+    httpToken: 'test-http-token',
     approvalTtlMs: 60_000,
     approvalStore: 'memory',
     transport: 'stdio',
@@ -104,12 +106,19 @@ describe('v0.6 --write bypasses everything', () => {
     });
   });
 
-  it('sensitive queues approval in default mode with SENSITIVE=1', async () => {
+  it('sensitive reads execute in default mode with SENSITIVE=1', async () => {
     await withClient(cfg({ writeMode: false, sensitiveEnabled: true }), async (c) => {
       const r = parse(await c.callTool({ name: 'hcm_search_salary_bases', arguments: {} }));
-      expect(r.pending_approval).toBe(true);
-      expect(r.sensitive).toBe(true);
+      expect(r.pending_approval).toBeUndefined();
+      expect(r.items?.length).toBeGreaterThanOrEqual(1);
     });
+  });
+
+  it('prod profile cannot turn writeMode on', () => {
+    const sandbox = { ...DEFAULT_PROFILES.find((p) => p.name === 'sandbox')!, writeMode: true };
+    const base = cfg({ writeMode: false });
+    const next = applyProfileToConfig(base, sandbox);
+    expect(next.writeMode).toBe(false);
   });
 
   it('prod profile cannot turn off writeMode when --write set', () => {

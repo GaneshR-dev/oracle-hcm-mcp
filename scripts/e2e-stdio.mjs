@@ -19,6 +19,7 @@ const ENV = {
   ORACLE_HCM_AUTH: 'basic',
   ORACLE_HCM_USERNAME: 'demo',
   ORACLE_HCM_PASSWORD: 'demo',
+  ORACLE_HCM_APPROVAL_TOKEN: 'e2e-approval-token',
 };
 
 const APPROVAL_TOOLS = [
@@ -337,7 +338,7 @@ async function runApprovalMode() {
       },
     });
     const denyId = pendingDeny.data.approval_id;
-    const denied = await call(client, 'hcm_deny_write', { approval_id: denyId });
+    const denied = await call(client, 'hcm_deny_write', { approval_id: denyId, approval_token: ENV.ORACLE_HCM_APPROVAL_TOKEN });
     record(
       section,
       'hcm_deny_write',
@@ -356,7 +357,7 @@ async function runApprovalMode() {
       },
     });
     const approveId = pending2.data.approval_id;
-    const approved = await call(client, 'hcm_approve_write', { approval_id: approveId });
+    const approved = await call(client, 'hcm_approve_write', { approval_id: approveId, approval_token: ENV.ORACLE_HCM_APPROVAL_TOKEN });
     const createdId = approved.data.result?.AbsenceId;
     record(
       section,
@@ -389,7 +390,7 @@ async function runApprovalMode() {
       const still = await call(client, 'hcm_list_pending_approvals', {});
       const ids = (still.data.pending ?? []).map((p) => p.approval_id);
       if (ids.includes(pending1.data.approval_id)) {
-        await call(client, 'hcm_approve_write', { approval_id: pending1.data.approval_id });
+        await call(client, 'hcm_approve_write', { approval_id: pending1.data.approval_id, approval_token: ENV.ORACLE_HCM_APPROVAL_TOKEN });
       }
     }
 

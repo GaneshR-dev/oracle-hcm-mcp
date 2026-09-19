@@ -10,12 +10,11 @@ Unofficial Model Context Protocol (MCP) server for **Oracle Fusion Cloud HCM** R
 
 ## Status
 
-v0.6 — performance (cycles/feedback/check-ins), learning depth, compensation LOVs + offer letter fields,
-workforce structures, document records, journeys, absence entitlement/accrual LOVs, HR recipes
-(transfer/terminate/promote/contingent/mass-approve), dry-run preview, field maps, role/privilege probe,
-Atom CDC status, webhook replay protection, approval UI domain/bulk/export, OpenAPI allowlist refresh,
-multi-tenant profiles (`--write` always wins), OTBI thin read, benefits dependents/life events,
-payroll costing/element entries (SENSITIVE in default only), talent pools. **190+ tools**.
+v0.7 — split-principal approvals (`ORACLE_HCM_APPROVAL_TOKEN` never returned by tools),
+HTTP/gRPC bearer, path canonicalization (no `..` / host escape), SENSITIVE **resource roots**
+(so `hcm_rest_get` cannot bypass payslip/bank gates), profiles cannot enable `--write`,
+Fusion `REST-Framework-Version` / `If-Match`, ADF `q=` quoting, XSS-safe Approval UI,
+setup-UI CSRF/SSRF guards, dotenv. **190+ tools**.
 Perfect ADF coverage is **not** a goal. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ### Honest coverage
@@ -38,7 +37,7 @@ Perfect ADF coverage is **not** a goal. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 | Mode | Behavior |
 |------|----------|
-| **Default** | Mutating tools return `pending_approval` with an `approval_id`. A human (or trusted client) must call `hcm_approve_write` or `hcm_deny_write`. **SENSITIVE** tools also need `ORACLE_HCM_SENSITIVE=1`. |
+| **Default** | Mutating tools return `pending_approval` with an `approval_id`. A **human/ops principal** must call `hcm_approve_write` / `hcm_deny_write` with `approval_token` (`ORACLE_HCM_APPROVAL_TOKEN` — never returned by tools) or use the Approval UI (HTTP bearer). **SENSITIVE** reads need `ORACLE_HCM_SENSITIVE=1` then execute; sensitive **writes** also queue. |
 | **`--write`** / `ORACLE_HCM_WRITE=1` | **Bypasses everything**: no approval queue, no SENSITIVE gate, no prod-profile write lock — mutations (including payslip/bank/comp) run **immediately**. Use only for trusted automation. |
 
 Unknown / future `hcm_*` tools are classified as **write** (safe default).
@@ -46,8 +45,8 @@ Unknown / future `hcm_*` tools are classified as **write** (safe default).
 ## Transports
 
 - **stdio** (default) — for Claude Desktop / Cursor / MCP clients
-- **Streamable HTTP** — `POST /mcp` (plus `GET /health`)
-- **gRPC** — custom bridge wrapping MCP JSON-RPC (`proto/mcp_bridge.proto`)
+- **Streamable HTTP** — `POST /mcp` (plus `GET /health`). Bearer required on `/mcp` and `/approvals`.
+- **gRPC** — custom bridge wrapping MCP JSON-RPC (`proto/mcp_bridge.proto`). Same bearer via `authorization` / `x-hcm-token` metadata.
 
 
 ## Approval UI (humans)
@@ -58,7 +57,8 @@ npm run approval-ui
 # open http://127.0.0.1:8796
 ```
 
-Tiny localhost page to list / approve / deny pending writes. Unofficial — not Oracle.
+Tiny localhost page to list / approve / deny pending writes. Paste `ORACLE_HCM_HTTP_TOKEN`.
+Tool/summary text is rendered as text (not HTML). Unofficial — not Oracle.
 
 ## Setup UI (local wizard)
 

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolContext } from './helpers.js';
-import { gateWrite, runRead, jsonResult, errorResult, bindExecutor, recordAudit, executeApproved } from './helpers.js';
+import { gateWrite, runRead, jsonResult, errorResult, bindExecutor, recordAudit, executeApproved, requireApprovalToken } from './helpers.js';
 import { ALLOWED_ROOTS, assertAllowlisted } from '../../policy/allowlist.js';
 
 export const RESOURCE_CATALOG = [
@@ -492,11 +492,13 @@ function registerApproval(server: McpServer, ctx: ToolContext): void {
   }), ctx, 'hcm_list_pending_approvals'));
 
   server.registerTool('hcm_approve_write', {
-    description: 'Approve and execute a pending write by approval_id.',
-    inputSchema: { approval_id: z.string() },
+    description:
+      'HUMAN/OPS ONLY. Approve and execute a pending write. Requires approval_token matching ORACLE_HCM_APPROVAL_TOKEN (never returned by tools; printed on stderr at startup if generated).',
+    inputSchema: { approval_id: z.string(), approval_token: z.string() },
     annotations: { readOnlyHint: false },
-  }, async ({ approval_id }) => {
+  }, async ({ approval_id, approval_token }) => {
     try {
+      requireApprovalToken(ctx, { approval_token });
       const { intent, result } = await ctx.approvals.approve(approval_id, (toolName, args) =>
         executeApproved(ctx, toolName, args),
       );
@@ -508,11 +510,13 @@ function registerApproval(server: McpServer, ctx: ToolContext): void {
   });
 
   server.registerTool('hcm_deny_write', {
-    description: 'Deny a pending write by approval_id.',
-    inputSchema: { approval_id: z.string() },
+    description:
+      'HUMAN/OPS ONLY. Deny a pending write. Requires approval_token matching ORACLE_HCM_APPROVAL_TOKEN.',
+    inputSchema: { approval_id: z.string(), approval_token: z.string() },
     annotations: { readOnlyHint: false },
-  }, async ({ approval_id }) => {
+  }, async ({ approval_id, approval_token }) => {
     try {
+      requireApprovalToken(ctx, { approval_token });
       const intent = ctx.approvals.deny(approval_id);
       recordAudit(ctx, intent.toolName, 'deny', intent.approvalId);
       return jsonResult({ denied: true, approval_id: intent.approvalId, tool: intent.toolName });

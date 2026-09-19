@@ -1,11 +1,15 @@
 /**
- * Sensitive tools (payslip / bank / national-ID / compensation / payroll costing /
- * offer letter fields). Classification matters **only in default (approval) mode**:
- * they require ORACLE_HCM_SENSITIVE=1 and then queue for approval.
+ * Sensitive tools AND resource roots (payslip / bank / national-ID / compensation /
+ * payroll costing / offer letter fields). Classification matters **only in default
+ * (approval) mode**.
  *
- * Under `--write` / ORACLE_HCM_WRITE=1 these gates are **fully bypassed** — no
- * SENSITIVE flag and no approval queue. See docs/SECURITY.md.
+ * Roots are enforced in HcmClient so hcm_rest_get / lov / batch cannot bypass
+ * the named-tool SENSITIVE gate.
+ *
+ * Under `--write` / ORACLE_HCM_WRITE=1 these gates are **fully bypassed**.
  */
+
+import { canonicalizeResourcePath } from './allowlist.js';
 
 export const SENSITIVE_TOOLS = new Set([
   'hcm_get_payslip',
@@ -18,7 +22,6 @@ export const SENSITIVE_TOOLS = new Set([
   'hcm_get_compensation',
   'hcm_search_compensation',
   'hcm_update_compensation',
-  // v0.6
   'hcm_get_offer_letter_fields',
   'hcm_search_salary_bases',
   'hcm_get_salary_basis',
@@ -28,8 +31,45 @@ export const SENSITIVE_TOOLS = new Set([
   'hcm_get_element_entry',
   'hcm_create_element_entry',
   'hcm_update_element_entry',
+  'hcm_search_element_entries',
+  'hcm_search_calculation_cards',
+  'hcm_get_legislative_data',
+]);
+
+/** Resource roots that require ORACLE_HCM_SENSITIVE=1 (unless --write). */
+export const SENSITIVE_ROOTS = new Set([
+  'payslips',
+  'bankAccounts',
+  'nationalIdentifiers',
+  'personalPaymentMethods',
+  'compensationHistories',
+  'salaryBases',
+  'gradeSteps',
+  'payrollCosting',
+  'elementEntries',
+  'calculationCards',
+  'workerLegislativeData',
 ]);
 
 export function isSensitiveTool(name: string): boolean {
   return SENSITIVE_TOOLS.has(name);
+}
+
+export function isSensitiveRoot(root: string): boolean {
+  return SENSITIVE_ROOTS.has(root);
+}
+
+export function isSensitivePath(path: string): boolean {
+  try {
+    return isSensitiveRoot(canonicalizeResourcePath(path).root);
+  } catch {
+    return false;
+  }
+}
+
+export function sensitiveRootDeniedMessage(root: string): string {
+  return (
+    `Resource '${root}' is SENSITIVE (payslip/bank/national-ID/compensation/payroll). ` +
+    `Set ORACLE_HCM_SENSITIVE=1 in default mode, or use --write / ORACLE_HCM_WRITE=1 to bypass.`
+  );
 }

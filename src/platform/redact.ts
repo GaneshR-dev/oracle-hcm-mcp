@@ -8,7 +8,7 @@ import { recordRedaction } from './redactionAudit.js';
 const SECRET_KEYS =
   /^(password|client_?secret|bearer_?token|access_?token|refresh_?token|authorization|api_?key)$/i;
 const MASK_KEYS =
-  /^(nationalIdentifier|NationalIdentifierNumber|BankAccountNumber|AccountNumber|IBAN|routingNumber|ssn|taxId)$/i;
+  /^(nationalIdentifier|NationalIdentifierNumber|BankAccountNumber|AccountNumber|IBAN|routingNumber|ssn|taxId|DateOfBirth|dateOfBirth|EmailAddress|emailAddress|PhoneNumber|phoneNumber|SalaryAmount|AnnualAmount|ProposedSalary|NetPay)$/i;
 
 export type RedactOptions = {
   tool?: string;

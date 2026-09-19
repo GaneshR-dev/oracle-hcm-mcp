@@ -1,13 +1,14 @@
 /**
  * Thin fetch wrapper for Oracle Fusion Cloud HCM REST.
  * Supports Basic, Bearer, and OAuth client-credentials.
- * v0.5: connection pool agents, tuned 429 backoff, batch GET, probe helper, token expiry.
+ * Paths are canonicalized (no .. / host escape) and SENSITIVE roots are gated.
  * Unofficial — HCM RBAC still applies on the real server.
  */
 
 import type { Config } from '../config.js';
 import { resourcesBase } from '../config.js';
-import { assertAllowlisted, normalizeResourcePath } from '../policy/allowlist.js';
+import { assertAllowlisted, canonicalizeResourcePath } from '../policy/allowlist.js';
+import { isSensitiveRoot, sensitiveRootDeniedMessage } from '../policy/sensitive.js';
 import { RateLimiter, withBackoff } from '../platform/rateLimit.js';
 import { agentForUrl } from '../platform/connectionPool.js';
 
@@ -55,9 +56,31 @@ export class HcmClient {
     this.cachedToken = undefined;
   }
 
-  resourcesUrl(path: string): string {
-    const p = normalizeResourcePath(path);
-    return `${resourcesBase(this.cfg)}/${p}`;
+  private assertSensitiveRoot(root: string): void {
+    if (!isSensitiveRoot(root)) return;
+    if (this.cfg.writeMode || this.cfg.sensitiveEnabled) return;
+    throw new Error(sensitiveRootDeniedMessage(root));
+  }
+
+  /**
+   * Build a URL that cannot escape `{baseUrl}/resources/{apiVersion}/`.
+   */
+  resourcesUrl(path: string, opts: { skipSensitive?: boolean } = {}): string {
+    const canon = assertAllowlisted(path);
+    if (!opts.skipSensitive) this.assertSensitiveRoot(canon.root);
+    const base = resourcesBase(this.cfg);
+    let href = `${base}/${canon.resourcePath}`;
+    if (canon.query) href += `?${canon.query}`;
+    const parsed = new URL(href);
+    const baseParsed = new URL(base.endsWith('/') ? base : `${base}/`);
+    if (parsed.protocol !== baseParsed.protocol || parsed.host !== baseParsed.host) {
+      throw new Error('Refusing to call a host other than the configured HCM base URL');
+    }
+    const prefix = baseParsed.pathname.replace(/\/+$/, '');
+    if (parsed.pathname !== prefix && !parsed.pathname.startsWith(`${prefix}/`)) {
+      throw new Error('Refusing to escape the configured HCM resources base path');
+    }
+    return parsed.toString();
   }
 
   oauthTokenInfo(): OAuthTokenInfo {
@@ -135,19 +158,33 @@ export class HcmClient {
 
   /**
    * Probe that returns status without throwing on 4xx — for smoke matrices.
-   * Exposed for smokeProbe.
+   * Allowlisted (no traversal) but SENSITIVE body is omitted unless enabled.
    */
   async probe(path: string): Promise<{ status: number; ok: boolean; ms: number; bodySnippet?: string }> {
     const t0 = Date.now();
-    const url = this.resourcesUrl(path);
+    const url = this.resourcesUrl(path, { skipSensitive: true });
     const res = await this.rawFetchAllowError(url, { method: 'GET' });
     const text = await res.text().catch(() => '');
+    let sensitive = false;
+    try {
+      sensitive = isSensitiveRoot(canonicalizeResourcePath(path).root);
+    } catch {
+      /* ignore */
+    }
+    const hideBody = sensitive && !this.cfg.sensitiveEnabled && !this.cfg.writeMode;
     return {
       status: res.status,
       ok: res.status >= 200 && res.status < 300,
       ms: Date.now() - t0,
-      bodySnippet: text.slice(0, 200),
+      bodySnippet: hideBody ? undefined : text.slice(0, 200),
     };
+  }
+
+  /** GET the resources/{version} collection root (OpenAPI/describe). Not a generic agent path. */
+  async getVersionRoot(): Promise<unknown> {
+    const url = `${resourcesBase(this.cfg)}`;
+    const res = await this.rawFetch(url, { method: 'GET' });
+    return this.parseJson(res);
   }
 
   async getJson<T = unknown>(path: string, query?: Record<string, string | number | undefined>): Promise<T> {
@@ -193,7 +230,6 @@ export class HcmClient {
         if (i >= paths.length) return;
         const p = paths[i]!;
         try {
-          assertAllowlisted(p);
           const data = await this.getJson(p);
           results[i] = { path: p, ok: true, status: 200, data };
         } catch (e) {
@@ -213,33 +249,35 @@ export class HcmClient {
   async postJson<T = unknown>(path: string, body: unknown): Promise<T> {
     const res = await this.rawFetch(this.resourcesUrl(path), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.mutateHeaders(),
       body: JSON.stringify(body ?? {}),
     });
     return this.parseJson<T>(res);
   }
 
   async patchJson<T = unknown>(path: string, body: unknown): Promise<T> {
+    const headers = this.mutateHeaders();
+    headers['If-Match'] = this.cfg.ifMatch ?? '*';
+    if (this.cfg.effectiveOf) headers['Effective-Of'] = this.cfg.effectiveOf;
     const res = await this.rawFetch(this.resourcesUrl(path), {
       method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        'Effective-Of': 'RangeMode=POST',
-      },
+      headers,
       body: JSON.stringify(body ?? {}),
     });
     return this.parseJson<T>(res);
   }
 
   async delete(path: string): Promise<{ deleted: boolean; status: number }> {
-    const res = await this.rawFetch(this.resourcesUrl(path), { method: 'DELETE' });
+    const res = await this.rawFetch(this.resourcesUrl(path), {
+      method: 'DELETE',
+      headers: { 'If-Match': this.cfg.ifMatch ?? '*' },
+    });
     if (res.status === 204 || res.status === 200) return { deleted: true, status: res.status };
     if (!res.ok) await this.throwHttp(res);
     return { deleted: true, status: res.status };
   }
 
   async restGet(path: string, query?: Record<string, string | number | undefined>): Promise<unknown> {
-    assertAllowlisted(path);
     return this.getJson(path, query);
   }
 
@@ -248,16 +286,22 @@ export class HcmClient {
     path: string,
     body?: unknown,
   ): Promise<unknown> {
-    assertAllowlisted(path);
     if (method === 'DELETE') return this.delete(path);
     if (method === 'POST') return this.postJson(path, body);
     if (method === 'PATCH') return this.patchJson(path, body);
     const res = await this.rawFetch(this.resourcesUrl(path), {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.mutateHeaders(),
       body: JSON.stringify(body ?? {}),
     });
     return this.parseJson(res);
+  }
+
+  private mutateHeaders(): Record<string, string> {
+    const type = this.cfg.adfContentType
+      ? 'application/vnd.oracle.adf.resourceitem+json'
+      : 'application/json';
+    return { 'Content-Type': type };
   }
 
   private async rawFetch(url: string, init: RequestInit): Promise<Response> {
@@ -266,12 +310,14 @@ export class HcmClient {
       async () => {
         const headers = new Headers(init.headers);
         headers.set('Accept', 'application/json');
+        headers.set('REST-Framework-Version', this.cfg.restFrameworkVersion ?? '4');
         const auth = await this.authorizationHeader();
         if (auth) headers.set('Authorization', auth);
         const agent = agentForUrl(url);
         const res = await fetch(url, {
           ...init,
           headers,
+          redirect: 'error',
           // @ts-expect-error Node fetch undici / agent passthrough where supported
           agent,
         });
@@ -299,12 +345,14 @@ export class HcmClient {
     await this.limiter.take();
     const headers = new Headers(init.headers);
     headers.set('Accept', 'application/json');
+    headers.set('REST-Framework-Version', this.cfg.restFrameworkVersion ?? '4');
     const auth = await this.authorizationHeader();
     if (auth) headers.set('Authorization', auth);
     const agent = agentForUrl(url);
     return fetch(url, {
       ...init,
       headers,
+      redirect: 'error',
       // @ts-expect-error Node agent
       agent,
     });
@@ -337,6 +385,15 @@ export class HcmClient {
     if (!tokenUrl || !clientId || !clientSecret) {
       throw new Error('OAuth requires ORACLE_HCM_TOKEN_URL, ORACLE_HCM_CLIENT_ID, ORACLE_HCM_CLIENT_SECRET');
     }
+    let parsed: URL;
+    try {
+      parsed = new URL(tokenUrl);
+    } catch {
+      throw new Error('ORACLE_HCM_TOKEN_URL is not a valid URL');
+    }
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      throw new Error('ORACLE_HCM_TOKEN_URL must be http(s)');
+    }
     const body = new URLSearchParams({
       grant_type: 'client_credentials',
       client_id: clientId,
@@ -346,6 +403,7 @@ export class HcmClient {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body,
+      redirect: 'error',
     });
     if (!res.ok) {
       throw new HcmHttpError(`OAuth token request failed: ${res.status}`, res.status, await safeText(res));
@@ -367,11 +425,14 @@ export class HcmClient {
   }
 
   private async throwHttp(res: Response): Promise<never> {
-    let body: unknown;
-    try {
-      body = await res.json();
-    } catch {
-      body = await safeText(res);
+    const text = await safeText(res);
+    let body: unknown = text;
+    if (text) {
+      try {
+        body = JSON.parse(text);
+      } catch {
+        body = text;
+      }
     }
     const ra = res.headers.get('retry-after');
     throw new HcmHttpError(

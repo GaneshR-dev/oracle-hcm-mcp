@@ -23,6 +23,7 @@ import {
   applyProfileToConfig,
   emitMcpFragmentForProfile,
   DEFAULT_PROFILES,
+  type EnvProfile,
 } from '../../platform/profiles.js';
 import {
   runSmokeProbe,
@@ -36,6 +37,7 @@ import {
   clearRedactionEvents,
 } from '../../platform/redactionAudit.js';
 import { entriesToAtomXml, feedIdForCollection } from '../../platform/atomCdc.js';
+import { adfEquals } from '../../policy/adf.js';
 
 const listArgs = {
   q: z.string().optional().describe('ADF q= filter, e.g. PersonNumber=P1001'),
@@ -142,48 +144,44 @@ function registerSmokeAndProfiles(server: McpServer, ctx: ToolContext): void {
       }, ctx, 'hcm_list_profiles'),
   );
 
+  bindExecutor(ctx, 'hcm_switch_profile', async (args) => {
+    const persist = args.persist !== false;
+    const store = persist
+      ? setActiveProfile(String(args.name), ctx.config.profilesPath)
+      : (() => {
+          const s = loadProfileStore(ctx.config.profilesPath);
+          s.active = String(args.name);
+          return s;
+        })();
+    const profile = getActiveProfile(store);
+    if (!profile) throw new Error(`Profile not found: ${args.name}`);
+    const next = applyProfileToConfig(ctx.config, profile);
+    Object.assign(ctx.config, next);
+    ctx.writeMode = next.writeMode;
+    ctx.client.applyConfig(next);
+    return {
+      active: store.active,
+      applied: {
+        baseUrl: next.baseUrl,
+        authMode: next.authMode,
+        writeMode: next.writeMode,
+        profile: next.profile,
+      },
+      note: 'Profile applied in-process. writeMode is never enabled by a profile. Cursor mcp.json still needs matching env for new sessions.',
+    };
+  });
   server.registerTool(
     'hcm_switch_profile',
     {
       description:
-        'Switch active multi-env profile and hot-apply base URL / auth hints to the running client (secrets from env). Example: { "name": "dummy" }',
+        'Switch active multi-env profile and hot-apply base URL / auth hints (secrets from env). Approval-gated. Profiles cannot enable --write. Example: { "name": "dummy" }',
       inputSchema: {
         name: z.string().describe('Profile name: dummy | sandbox | prod | custom'),
         persist: z.boolean().optional().describe('Write profiles.json (default true)'),
       },
       annotations: { readOnlyHint: false },
     },
-    async (args) => {
-      try {
-        const store =
-          args.persist === false
-            ? (() => {
-                const s = loadProfileStore(ctx.config.profilesPath);
-                s.active = args.name;
-                return s;
-              })()
-            : setActiveProfile(args.name, ctx.config.profilesPath);
-        const profile = getActiveProfile(store);
-        if (!profile) return errorResult(new Error(`Profile not found: ${args.name}`));
-        const next = applyProfileToConfig(ctx.config, profile);
-        Object.assign(ctx.config, next);
-        ctx.writeMode = next.writeMode;
-        ctx.client.applyConfig(next);
-        recordAudit(ctx, 'hcm_switch_profile', 'write', `active=${args.name}`);
-        return jsonResult({
-          active: store.active,
-          applied: {
-            baseUrl: next.baseUrl,
-            authMode: next.authMode,
-            writeMode: next.writeMode,
-            profile: next.profile,
-          },
-          note: 'Profile applied in-process. Cursor mcp.json still needs matching env for new sessions — use hcm_emit_profile_mcp_config.',
-        });
-      } catch (e) {
-        return errorResult(e);
-      }
-    },
+    async (args) => gateWrite(ctx, 'hcm_switch_profile', args as Record<string, unknown>),
   );
 
   server.registerTool(
@@ -215,10 +213,35 @@ function registerSmokeAndProfiles(server: McpServer, ctx: ToolContext): void {
       }, ctx, 'hcm_emit_profile_mcp_config'),
   );
 
+  bindExecutor(ctx, 'hcm_upsert_profile', async (args) => {
+    const store = loadProfileStore(ctx.config.profilesPath);
+    const existing = store.profiles.findIndex((p) => p.name === String(args.name));
+    const row = {
+      name: String(args.name),
+      kind: String(args.kind ?? args.name),
+      baseUrl: String(args.baseUrl),
+      apiVersion: args.apiVersion as string | undefined,
+      authMode: args.authMode as EnvProfile['authMode'],
+      username: args.username as string | undefined,
+      passwordEnv: args.passwordEnv as string | undefined,
+      bearerTokenEnv: args.bearerTokenEnv as string | undefined,
+      tokenUrl: args.tokenUrl as string | undefined,
+      clientId: args.clientId as string | undefined,
+      clientSecretEnv: args.clientSecretEnv as string | undefined,
+      // stored but ignored by applyProfileToConfig — profiles cannot enable writes
+      writeMode: false,
+      note: args.note as string | undefined,
+    };
+    if (existing >= 0) store.profiles[existing] = { ...store.profiles[existing], ...row };
+    else store.profiles.push(row);
+    saveProfileStore(store);
+    return { ok: true, profile: row.name, count: store.profiles.length, writeModeIgnored: true };
+  });
   server.registerTool(
     'hcm_upsert_profile',
     {
-      description: 'Create or update a multi-env profile (no secrets inline — use *Env field names).',
+      description:
+        'Create or update a multi-env profile (no secrets inline — use *Env field names). Approval-gated. writeMode on the profile is ignored.',
       inputSchema: {
         name: z.string(),
         kind: z.string().optional(),
@@ -236,33 +259,7 @@ function registerSmokeAndProfiles(server: McpServer, ctx: ToolContext): void {
       },
       annotations: { readOnlyHint: false },
     },
-    async (args) => {
-      try {
-        const store = loadProfileStore(ctx.config.profilesPath);
-        const existing = store.profiles.findIndex((p) => p.name === args.name);
-        const row = {
-          name: args.name,
-          kind: args.kind ?? args.name,
-          baseUrl: args.baseUrl,
-          apiVersion: args.apiVersion,
-          authMode: args.authMode,
-          username: args.username,
-          passwordEnv: args.passwordEnv,
-          bearerTokenEnv: args.bearerTokenEnv,
-          tokenUrl: args.tokenUrl,
-          clientId: args.clientId,
-          clientSecretEnv: args.clientSecretEnv,
-          writeMode: args.writeMode,
-          note: args.note,
-        };
-        if (existing >= 0) store.profiles[existing] = { ...store.profiles[existing], ...row };
-        else store.profiles.push(row);
-        saveProfileStore(store);
-        return jsonResult({ ok: true, profile: row.name, count: store.profiles.length });
-      } catch (e) {
-        return errorResult(e);
-      }
-    },
+    async (args) => gateWrite(ctx, 'hcm_upsert_profile', args as Record<string, unknown>),
   );
 }
 
@@ -278,22 +275,15 @@ function registerOAuthAndConfig(server: McpServer, ctx: ToolContext): void {
       runRead(async () => ctx.client.oauthTokenInfo(), ctx, 'hcm_oauth_token_status'),
   );
 
+  bindExecutor(ctx, 'hcm_oauth_refresh', async () => ctx.client.refreshOAuthToken());
   server.registerTool(
     'hcm_oauth_refresh',
     {
-      description: 'Force OAuth client-credentials token refresh. Returns new expiry (not the token).',
+      description: 'Force OAuth client-credentials token refresh. Returns new expiry (not the token). Approval-gated.',
       inputSchema: {},
       annotations: { readOnlyHint: false },
     },
-    async () => {
-      try {
-        const info = await ctx.client.refreshOAuthToken();
-        recordAudit(ctx, 'hcm_oauth_refresh', 'write', `expiresIn=${info.expiresInSec}`);
-        return jsonResult(info);
-      } catch (e) {
-        return errorResult(e);
-      }
-    },
+    async (args) => gateWrite(ctx, 'hcm_oauth_refresh', args as Record<string, unknown>),
   );
 
   server.registerTool(
@@ -303,7 +293,6 @@ function registerOAuthAndConfig(server: McpServer, ctx: ToolContext): void {
         'Probe connectivity “as user X” by temporarily using basic-auth username (password from current config / env). Does not persist. Example: { "username": "hcm_user" }',
       inputSchema: {
         username: z.string(),
-        password: z.string().optional().describe('Optional override; prefer env — never logged'),
       },
       annotations: { readOnlyHint: true },
     },
@@ -315,7 +304,7 @@ function registerOAuthAndConfig(server: McpServer, ctx: ToolContext): void {
             ...ctx.config,
             authMode: 'basic',
             username: args.username,
-            password: args.password ?? ctx.config.password ?? process.env.ORACLE_HCM_PASSWORD,
+            password: ctx.config.password ?? process.env.ORACLE_HCM_PASSWORD,
           });
           const h = await ctx.client.health();
           return {
@@ -394,7 +383,7 @@ function registerPersonDeepRead(server: McpServer, ctx: ToolContext): void {
     async (args) =>
       runRead(async () => {
         const list = await ctx.client.list('workerAssignments', {
-          q: `WorkerId=${args.workerId}`,
+          q: adfEquals('WorkerId', String(args.workerId)),
           limit: 100,
         });
         let items = list.items as Record<string, unknown>[];
@@ -410,7 +399,7 @@ function registerPersonDeepRead(server: McpServer, ctx: ToolContext): void {
         let historyExtra: unknown = null;
         try {
           historyExtra = await ctx.client.list('assignmentHistories', {
-            q: `WorkerId=${args.workerId}`,
+            q: adfEquals('WorkerId', String(args.workerId)),
             limit: 50,
           });
         } catch {
@@ -441,7 +430,7 @@ function registerPersonDeepRead(server: McpServer, ctx: ToolContext): void {
         let workerId = args.workerId;
         if (!workerId && args.personNumber) {
           const found = await ctx.client.list('workers', {
-            q: `PersonNumber=${args.personNumber}`,
+            q: adfEquals('PersonNumber', args.personNumber),
             limit: 1,
           });
           const first = found.items[0] as { WorkerId?: string } | undefined;
@@ -452,7 +441,7 @@ function registerPersonDeepRead(server: McpServer, ctx: ToolContext): void {
           expand: 'workRelationships',
         });
         const assignments = await ctx.client.list('workerAssignments', {
-          q: `WorkerId=${workerId}`,
+          q: adfEquals('WorkerId', workerId),
           limit: 50,
         });
         let legislative = null;
@@ -535,7 +524,7 @@ function registerRecruitingDepth(server: McpServer, ctx: ToolContext): void {
       runRead(
         () =>
           ctx.client.list('recruitingCandidateAttachments', {
-            q: `CandidateId=${args.candidateId}`,
+            q: adfEquals('CandidateId', String(args.candidateId)),
             limit: args.limit ?? 25,
           }),
         ctx,
@@ -648,12 +637,12 @@ function registerRecipes(server: McpServer, ctx: ToolContext): void {
     async (args) => {
       try {
         const workers = await ctx.client.list('workers', {
-          q: `PersonNumber=${args.personNumber}`,
+          q: adfEquals('PersonNumber', args.personNumber),
           limit: 1,
         });
         const worker = workers.items[0] ?? null;
         const checklists = await ctx.client.list('allocatedChecklists', {
-          q: `PersonNumber=${args.personNumber}`,
+          q: adfEquals('PersonNumber', args.personNumber),
           limit: 10,
         });
         if (args.allocate) {
@@ -719,7 +708,7 @@ function registerRecipes(server: McpServer, ctx: ToolContext): void {
     async (args) => {
       try {
         const balance = await ctx.client.list('planBalances', {
-          q: `personNumber=${args.personNumber}`,
+          q: adfEquals('personNumber', args.personNumber),
           limit: 25,
         });
         let createResult: unknown = null;
@@ -826,18 +815,18 @@ function registerRedactionAudit(server: McpServer, ctx: ToolContext): void {
       }, ctx, 'hcm_list_redaction_audit'),
   );
 
+  bindExecutor(ctx, 'hcm_clear_redaction_audit', async () => {
+    clearRedactionEvents();
+    return { cleared: true };
+  });
   server.registerTool(
     'hcm_clear_redaction_audit',
     {
-      description: 'Clear in-process redaction audit buffer.',
+      description: 'Clear in-process redaction audit buffer. Approval-gated.',
       inputSchema: {},
       annotations: { readOnlyHint: false },
     },
-    async () => {
-      clearRedactionEvents();
-      recordAudit(ctx, 'hcm_clear_redaction_audit', 'write', 'cleared');
-      return jsonResult({ cleared: true });
-    },
+    async (args) => gateWrite(ctx, 'hcm_clear_redaction_audit', args as Record<string, unknown>),
   );
 }
 
@@ -947,32 +936,26 @@ function registerBatchAndWebhookExtras(server: McpServer, ctx: ToolContext): voi
       ),
   );
 
+  bindExecutor(ctx, 'hcm_webhook_rotate_secret', async (args) => {
+    if (!ctx.webhook) throw new Error('Start webhook first via hcm_start_webhook_receiver');
+    const result = ctx.webhook.rotateSecret(String(args.newSecret), args.keepPrevious !== false);
+    return {
+      ...result,
+      note: 'New secret accepted; previous still valid if keepPrevious. Update ORACLE_HCM_WEBHOOK_SECRET / _SECRETS for restarts.',
+    };
+  });
   server.registerTool(
     'hcm_webhook_rotate_secret',
     {
       description:
-        'Rotate webhook HMAC secret on the running receiver (keeps previous during rotation). Example: { "newSecret": "…" }',
+        'Rotate webhook HMAC secret on the running receiver (keeps previous during rotation). Approval-gated. Example: { "newSecret": "…" }',
       inputSchema: {
         newSecret: z.string().min(8),
         keepPrevious: z.boolean().optional(),
       },
       annotations: { readOnlyHint: false },
     },
-    async (args) => {
-      try {
-        if (!ctx.webhook) {
-          return errorResult(new Error('Start webhook first via hcm_start_webhook_receiver'));
-        }
-        const result = ctx.webhook.rotateSecret(args.newSecret, args.keepPrevious !== false);
-        recordAudit(ctx, 'hcm_webhook_rotate_secret', 'write', `secrets=${result.secretsCount}`);
-        return jsonResult({
-          ...result,
-          note: 'New secret accepted; previous still valid if keepPrevious. Update ORACLE_HCM_WEBHOOK_SECRET / _SECRETS for restarts.',
-        });
-      } catch (e) {
-        return errorResult(e);
-      }
-    },
+    async (args) => gateWrite(ctx, 'hcm_webhook_rotate_secret', args as Record<string, unknown>),
   );
 }
 

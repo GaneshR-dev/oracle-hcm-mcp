@@ -15,6 +15,7 @@ import {
 } from './helpers.js';
 import { publicConfigView } from '../../config.js';
 import { ALLOWED_ROOTS, assertAllowlisted, isBlockedPath } from '../../policy/allowlist.js';
+import { adfEquals } from '../../policy/adf.js';
 import { classifyTool, READ_TOOLS, WRITE_TOOLS } from '../../policy/classify.js';
 import { SENSITIVE_TOOLS } from '../../policy/sensitive.js';
 import { RESOURCE_CATALOG } from './register-core.js';
@@ -311,19 +312,19 @@ function registerAtom(server: McpServer, ctx: ToolContext): void {
       }, ctx, 'hcm_atom_get_checkpoint'),
   );
 
+  bindExecutor(ctx, 'hcm_atom_reset_checkpoint', async (args) => {
+    if (args.collection) ctx.atomCheckpoints.clear(feedIdForCollection(String(args.collection)));
+    else ctx.atomCheckpoints.clear();
+    return { reset: true, collection: (args.collection as string | undefined) ?? '*' };
+  });
   server.registerTool(
     'hcm_atom_reset_checkpoint',
     {
-      description: 'Clear Atom CDC checkpoint for a collection (or all). Local store only.',
+      description: 'Clear Atom CDC checkpoint for a collection (or all). Local store only. Approval-gated.',
       inputSchema: { collection: z.string().optional() },
       annotations: { readOnlyHint: false },
     },
-    async (args) =>
-      runRead(async () => {
-        if (args.collection) ctx.atomCheckpoints.clear(feedIdForCollection(args.collection));
-        else ctx.atomCheckpoints.clear();
-        return { reset: true, collection: args.collection ?? '*' };
-      }, ctx, 'hcm_atom_reset_checkpoint'),
+    async (args) => gateWrite(ctx, 'hcm_atom_reset_checkpoint', args as Record<string, unknown>),
   );
 }
 
@@ -594,7 +595,7 @@ function registerLovHelpers(server: McpServer, ctx: ToolContext): void {
       runRead(async () => {
         assertAllowlisted(args.resource);
         const list = await ctx.client.list(args.resource, {
-          q: `${args.key}=${args.value}`,
+          q: adfEquals(args.key, args.value),
           limit: 5,
         });
         const items = list.items as Record<string, unknown>[];
@@ -1022,7 +1023,7 @@ function registerSensitivePayroll(server: McpServer, ctx: ToolContext): void {
     server.registerTool(
       tool,
       {
-        description: `${desc} SENSITIVE: requires ORACLE_HCM_SENSITIVE=1 + approval (unless SENSITIVE_WRITE).`,
+        description: `${desc} SENSITIVE: requires ORACLE_HCM_SENSITIVE=1 (writes still queue for approval unless --write).`,
         inputSchema: listArgs,
         annotations: { readOnlyHint: true },
       },
@@ -1062,7 +1063,7 @@ function registerSensitivePayroll(server: McpServer, ctx: ToolContext): void {
   server.registerTool(
     'hcm_search_element_entries',
     {
-      description: 'Search payroll element entries (read-only specialist; not sensitive-gated).',
+      description: 'Search payroll element entries (SENSITIVE resource root — needs ORACLE_HCM_SENSITIVE=1).',
       inputSchema: listArgs,
       annotations: { readOnlyHint: true },
     },
@@ -1298,7 +1299,11 @@ function registerPlatformTools(server: McpServer, ctx: ToolContext): void {
       ctx.config.webhookSecret ??
       process.env.ORACLE_HCM_WEBHOOK_SECRET;
     if (!ctx.webhook) {
-      ctx.webhook = new WebhookReceiver({ secret, requireSignature: Boolean(secret) });
+      ctx.webhook = new WebhookReceiver({
+        secret,
+        requireSignature: Boolean(secret),
+        adminToken: ctx.config.httpToken ?? ctx.config.approvalToken,
+      });
     }
     const url = await ctx.webhook.start(port);
     return {

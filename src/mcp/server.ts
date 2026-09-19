@@ -12,7 +12,7 @@ import type { ToolContext } from './tools/helpers.js';
 
 export const SERVER_INFO = {
   name: 'oracle-hcm-mcp',
-  version: '0.6.0',
+  version: '0.7.0',
   title: 'Unofficial Oracle HCM MCP',
 };
 
@@ -47,9 +47,9 @@ export function createMcpServer(cfg: Config, ctx?: ToolContext): McpServer {
         'Unofficial MCP server for Oracle Fusion Cloud HCM REST APIs.',
         'NOT affiliated with, endorsed by, or supported by Oracle Corporation.',
         cfg.writeMode
-          ? 'Running in --write mode: ALL mutating tools (including sensitive) execute immediately — no approval queue, no SENSITIVE gate, no prod-profile write lock.'
-          : 'Default mode: mutating tools return pending_approval; use hcm_approve_write / hcm_deny_write. Sensitive tools also need ORACLE_HCM_SENSITIVE=1.',
-        'SENSITIVE classification only applies in default (approval) mode.',
+          ? 'Running in --write mode: ALL mutating tools (including sensitive) execute immediately — no approval queue, no SENSITIVE gate.'
+          : 'Default mode: mutating tools return pending_approval. Approving requires ORACLE_HCM_APPROVAL_TOKEN (never returned to the agent). Sensitive resource roots also need ORACLE_HCM_SENSITIVE=1.',
+        'HTTP/gRPC require Authorization: Bearer <ORACLE_HCM_HTTP_TOKEN>. Generic REST paths are canonicalized; .. traversal is rejected. SENSITIVE roots cannot be reached via hcm_rest_get without the flag.',
         'Atom CDC: hcm_atom_poll / hcm_atom_consume with local checkpoints. Webhooks verify HMAC when ORACLE_HCM_WEBHOOK_SECRET is set.',
         'HCM RBAC and your Oracle licenses still apply. Handle PII carefully.',
       ].join(' '),

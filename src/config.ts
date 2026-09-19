@@ -3,6 +3,10 @@
  * Not affiliated with Oracle Corporation.
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
+import { randomBytes } from 'node:crypto';
+
 export type AuthMode = 'basic' | 'bearer' | 'oauth' | 'none';
 
 export interface Config {
@@ -40,6 +44,23 @@ export interface Config {
   profile?: string;
   /** Path to profiles.json for multi-env switcher */
   profilesPath?: string;
+  /**
+   * Token required to approve/deny pending writes (MCP tools + HTTP /approvals).
+   * Never returned by tools. Generated at startup if unset (stderr only).
+   */
+  approvalToken?: string;
+  /** Token required for HTTP /mcp, /approvals and gRPC. Defaults to approvalToken. */
+  httpToken?: string;
+  /** When false, HTTP/gRPC skip bearer auth (debug only). Default true. */
+  httpAuthRequired?: boolean;
+  /** Fusion REST-Framework-Version header (default 4) */
+  restFrameworkVersion?: string;
+  /** If-Match for PATCH/DELETE (default * for integration users) */
+  ifMatch?: string;
+  /** Send ADF resourceitem content-type on POST/PATCH/PUT */
+  adfContentType?: boolean;
+  /** Optional Effective-Of header (e.g. RangeMode=UPDATE). Empty = omit. */
+  effectiveOf?: string;
 }
 
 function envFlag(name: string): boolean {
@@ -47,11 +68,47 @@ function envFlag(name: string): boolean {
   return v === '1' || v === 'true' || v === 'yes';
 }
 
+/** Load .env then .env.local from cwd; never override existing process.env. */
+export function loadDotenv(cwd = process.cwd()): void {
+  for (const name of ['.env', '.env.local']) {
+    const file = path.join(cwd, name);
+    try {
+      if (!fs.existsSync(file)) continue;
+      const text = fs.readFileSync(file, 'utf8');
+      for (const line of text.split(/\r?\n/)) {
+        const t = line.trim();
+        if (!t || t.startsWith('#')) continue;
+        const eq = t.indexOf('=');
+        if (eq < 1) continue;
+        const key = t.slice(0, eq).trim();
+        let val = t.slice(eq + 1).trim();
+        if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+          val = val.slice(1, -1);
+        }
+        if (process.env[key] === undefined) process.env[key] = val;
+      }
+    } catch {
+      /* ignore unreadable env files */
+    }
+  }
+}
+
+function generateToken(label: string): string {
+  const t = randomBytes(32).toString('hex');
+  console.error(
+    `[oracle-hcm-mcp] ${label} not set — generated ephemeral token (stderr only, never returned by tools):`,
+  );
+  console.error(`  ${t}`);
+  return t;
+}
+
 export function parseArgs(argv: string[] = process.argv.slice(2)): Config {
+  loadDotenv();
+
   let writeMode = envFlag('ORACLE_HCM_WRITE');
   let baseUrl =
     process.env.ORACLE_HCM_BASE_URL ??
-    'https://fa-xxxx-hcm.fa.ocs.oraclecloud.com/hcmRestApi';
+    'http://127.0.0.1:9090/hcmRestApi';
   let httpPort: number | undefined;
   let grpcPort: number | undefined;
   let webhookPort: number | undefined;
@@ -86,6 +143,16 @@ export function parseArgs(argv: string[] = process.argv.slice(2)): Config {
   else if (authEnv === 'bearer' || authEnv === 'token') authMode = 'bearer';
   else if (authEnv === 'none' || authEnv === 'off') authMode = 'none';
 
+  const httpAuthRequired = !envFlag('ORACLE_HCM_HTTP_AUTH_OFF');
+  let approvalToken = process.env.ORACLE_HCM_APPROVAL_TOKEN;
+  if (!approvalToken && !writeMode) {
+    approvalToken = generateToken('ORACLE_HCM_APPROVAL_TOKEN');
+  }
+  let httpToken = process.env.ORACLE_HCM_HTTP_TOKEN ?? approvalToken;
+  if (!httpToken && httpAuthRequired && (transport === 'http' || transport === 'grpc')) {
+    httpToken = generateToken('ORACLE_HCM_HTTP_TOKEN');
+  }
+
   return {
     baseUrl: baseUrl.replace(/\/+$/, ''),
     apiVersion: process.env.ORACLE_HCM_API_VERSION ?? '11.13.18.05',
@@ -110,6 +177,13 @@ export function parseArgs(argv: string[] = process.argv.slice(2)): Config {
     transport,
     profile,
     profilesPath: process.env.ORACLE_HCM_PROFILES_PATH,
+    approvalToken,
+    httpToken,
+    httpAuthRequired,
+    restFrameworkVersion: process.env.ORACLE_HCM_REST_FRAMEWORK_VERSION ?? '4',
+    ifMatch: process.env.ORACLE_HCM_IF_MATCH ?? '*',
+    adfContentType: envFlag('ORACLE_HCM_ADF_CONTENT_TYPE'),
+    effectiveOf: process.env.ORACLE_HCM_EFFECTIVE_OF || undefined,
   };
 }
 
@@ -118,7 +192,6 @@ function resolveApprovalStoreMode(): Config['approvalStore'] {
   if (raw.startsWith('sqlite')) return 'sqlite';
   if (raw.startsWith('file') || process.env.ORACLE_HCM_APPROVAL_STORE_PATH) return 'file';
   if (raw === 'memory' || raw === 'mem') return 'memory';
-  // Default memory for interactive; set STORE_PATH for multi-node
   return 'memory';
 }
 
@@ -142,9 +215,14 @@ Env:
   ORACLE_HCM_USERNAME/PASSWORD, ORACLE_HCM_TOKEN_URL, CLIENT_ID/SECRET,
   ORACLE_HCM_BEARER_TOKEN, ORACLE_HCM_WRITE=1, ORACLE_HCM_API_VERSION,
   ORACLE_HCM_SENSITIVE=1, ORACLE_HCM_SENSITIVE_WRITE=1, ORACLE_HCM_PROFILE,
+  ORACLE_HCM_APPROVAL_TOKEN (required to approve writes; generated to stderr if unset),
+  ORACLE_HCM_HTTP_TOKEN (HTTP/gRPC bearer; defaults to approval token),
+  ORACLE_HCM_HTTP_AUTH_OFF=1 (debug: disable HTTP/gRPC auth — do not use),
   ORACLE_HCM_APPROVAL_STORE=memory|file|sqlite, ORACLE_HCM_APPROVAL_STORE_PATH,
   ORACLE_HCM_WEBHOOK_SECRET, ORACLE_HCM_WEBHOOK_SECRETS, ORACLE_HCM_WEBHOOK_MTLS,
-  ORACLE_HCM_ATOM_CHECKPOINT_PATH, ORACLE_HCM_PROFILES_PATH, ORACLE_HCM_SMOKE_DIR
+  ORACLE_HCM_ATOM_CHECKPOINT_PATH, ORACLE_HCM_PROFILES_PATH, ORACLE_HCM_SMOKE_DIR,
+  ORACLE_HCM_REST_FRAMEWORK_VERSION, ORACLE_HCM_IF_MATCH, ORACLE_HCM_ADF_CONTENT_TYPE,
+  ORACLE_HCM_EFFECTIVE_OF
 `);
 }
 
@@ -167,6 +245,9 @@ export function publicConfigView(cfg: Config): Record<string, unknown> {
     hasPassword: Boolean(cfg.password),
     hasBearerToken: Boolean(cfg.bearerToken),
     hasClientSecret: Boolean(cfg.clientSecret),
+    hasApprovalToken: Boolean(cfg.approvalToken),
+    hasHttpToken: Boolean(cfg.httpToken),
+    httpAuthRequired: cfg.httpAuthRequired,
     profile: cfg.profile ?? null,
     profilesPath: cfg.profilesPath ?? null,
     transport: cfg.transport,
@@ -174,6 +255,7 @@ export function publicConfigView(cfg: Config): Record<string, unknown> {
     approvalStorePath: cfg.approvalStorePath ?? null,
     webhookSigningConfigured: Boolean(cfg.webhookSecret),
     atomCheckpointPath: cfg.atomCheckpointPath ?? null,
+    restFrameworkVersion: cfg.restFrameworkVersion,
     unofficial: true,
     note: 'Secrets never included. Not an Oracle product.',
   };
