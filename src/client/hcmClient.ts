@@ -13,6 +13,7 @@ import { RateLimiter, withBackoff } from '../platform/rateLimit.js';
 import { agentForUrl } from '../platform/connectionPool.js';
 import { assertAtomTokens } from '../policy/atom.js';
 import { parseAtomEntry, parseAtomXml, type ParsedAtomEntry } from '../platform/atomCdc.js';
+import { ADF_DESCRIBE_ACCEPT, ADF_OPENAPI_ACCEPT } from '../policy/adf.js';
 
 export class HcmHttpError extends Error {
   constructor(
@@ -188,11 +189,77 @@ export class HcmClient {
     };
   }
 
-  /** GET the resources/{version} collection root (OpenAPI/describe). Not a generic agent path. */
+  /** GET the resources/{version}/describe catalog (official ADF metadata). */
   async getVersionRoot(): Promise<unknown> {
-    const url = `${resourcesBase(this.cfg)}`;
-    const res = await this.rawFetch(url, { method: 'GET' });
+    try {
+      return await this.describeCatalog({ metadataMode: 'minimal' });
+    } catch {
+      const url = `${resourcesBase(this.cfg)}`;
+      const res = await this.rawFetch(url, { method: 'GET' });
+      return this.parseJson(res);
+    }
+  }
+
+  /**
+   * Official catalog describe: GET resources/{version}/describe?metadataMode=minimal|list
+   * Not a collection root named "describe".
+   */
+  async describeCatalog(opts: {
+    metadataMode?: 'minimal' | 'list';
+    includeChildren?: boolean;
+    showAnnotations?: boolean;
+    format?: 'adf' | 'openapi';
+  } = {}): Promise<unknown> {
+    const base = resourcesBase(this.cfg).replace(/\/+$/, '');
+    const url = new URL(`${base}/describe`);
+    this.assertSameHost(url, base);
+    url.searchParams.set('metadataMode', opts.metadataMode ?? 'minimal');
+    if (opts.includeChildren) url.searchParams.set('includeChildren', 'true');
+    if (opts.showAnnotations) url.searchParams.set('showAnnotations', 'true');
+    const accept =
+      opts.format === 'openapi'
+        ? ADF_OPENAPI_ACCEPT
+        : `${ADF_DESCRIBE_ACCEPT}, application/json`;
+    const res = await this.rawFetch(url.toString(), {
+      method: 'GET',
+      headers: { Accept: accept },
+    });
     return this.parseJson(res);
+  }
+
+  /**
+   * Official resource describe: GET {path}/describe
+   * Schema metadata — SENSITIVE body gate is skipped (no PII payload).
+   */
+  async describeResource(
+    path: string,
+    opts: { includeChildren?: boolean; format?: 'adf' | 'openapi' } = {},
+  ): Promise<unknown> {
+    const trimmed = path.replace(/^\/+|\/+$/g, '').replace(/\/describe$/i, '');
+    const describePath = `${trimmed}/describe`;
+    const url = new URL(this.resourcesUrl(describePath, { skipSensitive: true }));
+    if (opts.includeChildren === false) url.searchParams.set('includeChildren', 'false');
+    else if (opts.includeChildren) url.searchParams.set('includeChildren', 'true');
+    const accept =
+      opts.format === 'openapi'
+        ? ADF_OPENAPI_ACCEPT
+        : `${ADF_DESCRIBE_ACCEPT}, application/json`;
+    const res = await this.rawFetch(url.toString(), {
+      method: 'GET',
+      headers: { Accept: accept },
+    });
+    return this.parseJson(res);
+  }
+
+  private assertSameHost(parsed: URL, base: string): void {
+    const baseParsed = new URL(base.endsWith('/') ? base : `${base}/`);
+    if (parsed.protocol !== baseParsed.protocol || parsed.host !== baseParsed.host) {
+      throw new Error('Refusing to call a host other than the configured HCM base URL');
+    }
+    const prefix = baseParsed.pathname.replace(/\/+$/, '');
+    if (parsed.pathname !== prefix && !parsed.pathname.startsWith(`${prefix}/`)) {
+      throw new Error('Refusing to escape the configured HCM resources base path');
+    }
   }
 
   async getJson<T = unknown>(path: string, query?: Record<string, string | number | undefined>): Promise<T> {

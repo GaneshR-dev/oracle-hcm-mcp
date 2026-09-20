@@ -854,12 +854,40 @@ async function runV09DomainSmoke() {
   }, { ORACLE_HCM_SENSITIVE: '1' });
 }
 
+async function runV10AdfDescribe() {
+  const section = 'H) v0.10 ADF describe (no GraphQL)';
+  console.log(`\n=== ${section} ===`);
+  await withClient(['dist/index.js'], async (client) => {
+    const d = await call(client, 'hcm_adf_describe', { resource: 'workers' });
+    record(
+      section,
+      'hcm_adf_describe workers',
+      !d.isError && d.data.queryable?.includes('PersonNumber') && d.data.graphql?.supported === false,
+      JSON.stringify(d.data).slice(0, 200),
+    );
+    const cat = await call(client, 'hcm_adf_catalog', {});
+    record(
+      section,
+      'hcm_adf_catalog',
+      !cat.isError && Array.isArray(cat.data.resources) && cat.data.resources.includes('workers'),
+      JSON.stringify(cat.data).slice(0, 200),
+    );
+    const surface = await call(client, 'hcm_fusion_api_surface', {});
+    record(
+      section,
+      'hcm_fusion_api_surface GraphQL unsupported',
+      !surface.isError && surface.data.graphql?.supported === false,
+      JSON.stringify(surface.data.graphql).slice(0, 200),
+    );
+  });
+}
+
 function writeReport() {
   const passed = results.filter((r) => r.pass).length;
   const failed = results.filter((r) => !r.pass).length;
   const verdict =
     failed === 0
-      ? 'PASS — stdio MCP e2e against dummy HCM (approval, --write, v0.3, v0.6, v0.7, v0.9)'
+      ? 'PASS — stdio MCP e2e against dummy HCM (approval, --write, v0.3, v0.6, v0.7, v0.9, v0.10)'
       : `FAIL — ${failed} step(s) failed (see details)`;
 
   const lines = [
@@ -868,7 +896,7 @@ function writeReport() {
     `- Date: ${new Date().toISOString()} (box UTC; user zone Asia/Calcutta)`,
     `- Target: http://127.0.0.1:9090 (dummy HCM, basic auth demo/demo)`,
     `- Script: scripts/e2e-stdio.mjs (MCP Client + StdioClientTransport)`,
-    `- Server: node dist/index.js [ --write ]  (v0.9.0)`,
+    `- Server: node dist/index.js [ --write ]  (v0.10.0)`,
     '',
     `## Verdict: **${verdict}**`,
     '',
@@ -908,6 +936,7 @@ function writeReport() {
   );
   lines.push(
     '- v0.9: official worker children, timeEventRequests, work-structure LOVs, recruiting/benefit children, documentRecords actions, If-Match 412.',
+    '- v0.10: ADF /describe + catalog + OpenAPI Accept. Fusion HCM has no GraphQL.',
   );
   lines.push('- Dummy HCM covers official 11.13.18.05 paths including atomservlet, recruiting, benefits, payslips (gated), checklists, performance, learning, recipes.', '');
 
@@ -933,6 +962,7 @@ async function main() {
   await runV07Security();
   await runV06DomainSmoke();
   await runV09DomainSmoke();
+  await runV10AdfDescribe();
   const ok = writeReport();
   process.exit(ok ? 0 : 1);
 }

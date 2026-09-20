@@ -194,6 +194,9 @@ const READ_TOOLS = new Set([
   'hcm_list_assignment_grade_steps',
   'hcm_download_document_attachments',
   'hcm_find_document_records_advanced',
+  'hcm_adf_describe',
+  'hcm_adf_catalog',
+  'hcm_fusion_api_surface',
 ]);
 
 const WRITE_TOOLS = new Set([

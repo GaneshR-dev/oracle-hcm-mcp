@@ -848,10 +848,10 @@ function registerPlatformV06(server: McpServer, ctx: ToolContext): void {
     'hcm_refresh_allowlist_from_openapi',
     {
       description:
-        'Pull tenant describe/OpenAPI JSON (or pass document) and merge safe roots into runtime allowlist. CE/AI stay blocked. Approval-gated.',
+        'Pull tenant ADF /describe or OpenAPI JSON (or pass document) and merge safe roots into runtime allowlist. CE/AI stay blocked. Approval-gated.',
       inputSchema: {
         document: z.record(z.unknown()).optional().describe('Inline OpenAPI/ADF describe JSON'),
-        fetchFromTenant: z.boolean().optional().describe('GET resources/ root from baseUrl'),
+        fetchFromTenant: z.boolean().optional().describe('GET resources/{version}/describe?metadataMode=minimal'),
         apply: z.boolean().optional().describe('Merge into runtime allowlist (default true)'),
       },
       annotations: { readOnlyHint: false },

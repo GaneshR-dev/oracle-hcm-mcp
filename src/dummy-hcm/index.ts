@@ -10,6 +10,17 @@ import { seedStore, type Store, type ChecklistTask, type Worker } from './data.j
 import { applyFinderFilter, parseFinderExpression } from '../policy/finders.js';
 import { entriesToAtomXml, parseAtomEntry } from '../platform/atomCdc.js';
 import { ATOM_FEEDS } from '../policy/atom.js';
+import { ALLOWED_ROOTS } from '../policy/allowlist.js';
+import {
+  buildCatalogDescribe,
+  buildResourceDescribe,
+  wrapResources,
+  adfDescribeToOpenApi,
+  wantsOpenApi,
+  parseDescribePath,
+  knownAdfResource,
+} from '../platform/adfDescribe.js';
+import { ADF_OPENAPI_ACCEPT, ADF_DESCRIBE_ACCEPT, FUSION_GRAPHQL } from '../policy/adf.js';
 
 const API = '/hcmRestApi/resources/11.13.18.05';
 const ATOM = '/hcmRestApi/atomservlet';
@@ -89,6 +100,75 @@ export function createDummyApp(store?: Store): express.Express {
 
   app.use(API, basicAuth);
   app.use(ATOM, basicAuth);
+
+  const hrefBase = API;
+  const sendDescribe = (req: express.Request, res: express.Response, rest: string): boolean => {
+    const parsed = parseDescribePath(rest);
+    if (!parsed) return false;
+    const openapi = wantsOpenApi(String(req.headers.accept ?? ''));
+    const includeChildren =
+      req.query.includeChildren === 'true' || req.query.includeChildren === '1';
+    if (parsed.kind === 'catalog') {
+      const mode = req.query.metadataMode === 'list' ? 'list' : 'minimal';
+      const catalog = buildCatalogDescribe({
+        hrefBase,
+        metadataMode: mode,
+        includeChildren,
+        roots: [...ALLOWED_ROOTS],
+      });
+      if (openapi) {
+        res.setHeader('Content-Type', ADF_OPENAPI_ACCEPT);
+        res.json({
+          openapi: '3.0.1',
+          info: { title: 'Oracle Fusion HCM catalog (dummy)', version: '11.13.18.05' },
+          paths: Object.fromEntries(ALLOWED_ROOTS.map((r) => [`/${r}`, { get: {} }])),
+          'x-fusion-graphql': FUSION_GRAPHQL,
+        });
+        return true;
+      }
+      res.setHeader('Content-Type', ADF_DESCRIBE_ACCEPT);
+      res.json(catalog);
+      return true;
+    }
+    const resource = parsed.resource!;
+    const root = parsed.root!;
+    if (!ALLOWED_ROOTS.includes(root) || !knownAdfResource(resource)) {
+      res.status(404).json({ error: 'Unknown resource describe', resource, root });
+      return true;
+    }
+    const body = buildResourceDescribe(resource, {
+      hrefBase,
+      includeChildren: req.query.includeChildren === 'false' ? false : true,
+    });
+    if (openapi) {
+      res.setHeader('Content-Type', ADF_OPENAPI_ACCEPT);
+      res.json(adfDescribeToOpenApi(resource, body));
+      return true;
+    }
+    res.setHeader('Content-Type', ADF_DESCRIBE_ACCEPT);
+    res.json(wrapResources(resource, body));
+    return true;
+  };
+
+  app.use((req, res, next) => {
+    if (req.method !== 'GET') return next();
+    if (!req.path.startsWith(API)) return next();
+    const rest = req.path.slice(API.length) || '/';
+    if (rest === '/describe' || rest.endsWith('/describe')) {
+      if (sendDescribe(req, res, rest)) return;
+    }
+    next();
+  });
+
+  const graphqlGone = (_req: express.Request, res: express.Response) => {
+    res.status(404).json({
+      error: 'GraphQL is not an Oracle Fusion Cloud HCM API',
+      graphql: FUSION_GRAPHQL,
+    });
+  };
+  app.all('/graphql', graphqlGone);
+  app.all('/hcmRestApi/graphql', graphqlGone);
+  app.all(`${API}/graphql`, graphqlGone);
 
   const crud = <T extends Record<string, unknown>>(
     root: string,

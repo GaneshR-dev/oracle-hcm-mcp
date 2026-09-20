@@ -1,22 +1,22 @@
 # Oracle HCM MCP — E2E Report
 
-- Date: 2026-09-20T11:21:12.297Z (box UTC; user zone Asia/Calcutta)
+- Date: 2026-09-20T11:40:29.786Z (box UTC; user zone Asia/Calcutta)
 - Target: http://127.0.0.1:9090 (dummy HCM, basic auth demo/demo)
 - Script: scripts/e2e-stdio.mjs (MCP Client + StdioClientTransport)
-- Server: node dist/index.js [ --write ]  (v0.9.0)
+- Server: node dist/index.js [ --write ]  (v0.10.0)
 
-## Verdict: **PASS — stdio MCP e2e against dummy HCM (approval, --write, v0.3, v0.6, v0.7, v0.9)**
+## Verdict: **PASS — stdio MCP e2e against dummy HCM (approval, --write, v0.3, v0.6, v0.7, v0.9, v0.10)**
 
 | Result | Count |
 | --- | --- |
-| PASS | 89 |
+| PASS | 92 |
 | FAIL | 0 |
 
 ## A) Approval mode (no --write)
 
 | Step | Result | Detail |
 | --- | --- | --- |
-| listTools — approval tools present, curated suite | PASS | `count=240; approval=true; tools=hcm_health,hcm_whoami,hcm_list_resources,hcm_describe_resource,hcm_search_workers,hcm_get_worker,hcm_get_worker_assignments,hcm_create_worker,hcm_update_worker,hcm_search_absences,hcm_get_absence,hcm_create_absence,hcm_update_absence,hcm_delete_absence,hcm_absence_balance,hcm_get_plan_balance,hcm_search_aor,hcm_get_aor,hcm_create_aor,hcm_update_aor,hcm_delete_aor,hcm_list_checklists,hcm_get_checklist,hcm_update_task_status,hcm_list_notifications,hcm_get_notificati` |
+| listTools — approval tools present, curated suite | PASS | `count=243; approval=true; tools=hcm_health,hcm_whoami,hcm_list_resources,hcm_describe_resource,hcm_search_workers,hcm_get_worker,hcm_get_worker_assignments,hcm_create_worker,hcm_update_worker,hcm_search_absences,hcm_get_absence,hcm_create_absence,hcm_update_absence,hcm_delete_absence,hcm_absence_balance,hcm_get_plan_balance,hcm_search_aor,hcm_get_aor,hcm_create_aor,hcm_update_aor,hcm_delete_aor,hcm_list_checklists,hcm_get_checklist,hcm_update_task_status,hcm_list_notifications,hcm_get_notificati` |
 | hcm_health | PASS | `{"ok":true,"baseUrl":"http://127.0.0.1:9090/hcmRestApi","writeMode":false,"authMode":"basic","profile":null,"oauth":{"hasToken":false,"expiresAt":null,"expiresInSec":null,"refreshAvailable":false}}` |
 | hcm_whoami | PASS | `{"authMode":"basic","username":"demo","clientId":null,"baseUrl":"http://127.0.0.1:9090/hcmRestApi","apiVersion":"11.13.18.05","writeMode":false,"profile":null,"oauth":{"hasToken":false,"expiresAt":null,"expiresInSec":null,"refreshAvailable":false},"note":"Unofficial MCP — identity reflects local config; HCM RBAC applies on server."}` |
 | hcm_list_resources | PASS | `{"resources":[{"name":"workers","path":"workers","description":"HCM workers (person + nested emails/phones/NIDs/workRelationships)"},{"name":"publicWorkers","path":"publicWorkers","description":"Publi` |
@@ -51,10 +51,10 @@
 | hcm_rest_get businessProcessNotifications | PASS | `{"items":[{"NotificationId":"N1","taskId":"N1","Subject":"Absence approval for Ada","Status":"OPEN","Assignee":"P1002"}]` |
 | hcm_rest_get allocatedTasks | PASS | `{"items":[{"TaskId":"T1","AllocatedTaskId":"T1","TaskName":"Complete I9","status":"IN_PROGRESS"},{"TaskId":"T2","Allocat` |
 | hcm_rest_get | PASS | `{"items":[{"WorkerId":"1001","PersonNumber":"P1001","DisplayName":"Ada Lovelace","FirstName":"Ada","LastName":"Lovelace","emails":[{"EmailId":"EM1","PersonNumber":"P1001","EmailAddress":"********.com"` |
-| hcm_create_absence → pending_approval | PASS | `{"pending_approval":true,"approval_id":"7d5ca1c8-6d3b-4278-916e-ab21ff5bdcc7","tool":"hcm_create_absence","summary":"hcm_create_absence(body={\"personNumber\":\"P1001\",\"absenceType\":\"Vacation\",\"startDate\":\"2026-12-01\",\"endDa)","expires_at":"2026-09-20T11:36:10.163Z","message":"Write queued` |
+| hcm_create_absence → pending_approval | PASS | `{"pending_approval":true,"approval_id":"02689616-754a-4f1c-a632-377e57939458","tool":"hcm_create_absence","summary":"hcm_create_absence(body={\"personNumber\":\"P1001\",\"absenceType\":\"Vacation\",\"startDate\":\"2026-12-01\",\"endDa)","expires_at":"2026-09-20T11:55:27.256Z","message":"Write queued` |
 | hcm_list_pending_approvals | PASS | `pending=1` |
-| hcm_deny_write | PASS | `{"denied":true,"approval_id":"cd3f3cea-82a4-43ec-bfb8-16d9a018d7bb","tool":"hcm_create_absence"}` |
-| hcm_approve_write | PASS | `{"approved":true,"approval_id":"0c913d94-041f-4af3-9d3f-16e4c89533d9","tool":"hcm_create_absence","result":{"AbsenceId":"A2001","personNumber":"P1001","absenceType":"Vacation","startDate":"2026-12-20","endDate":"2026-12-21","status":"SUBMITTED"}}` |
+| hcm_deny_write | PASS | `{"denied":true,"approval_id":"6a86e03b-e2d9-4f24-8c59-194834c17cca","tool":"hcm_create_absence"}` |
+| hcm_approve_write | PASS | `{"approved":true,"approval_id":"557bedf7-0c56-49c1-94ea-32da5fa26613","tool":"hcm_create_absence","result":{"AbsenceId":"A2001","personNumber":"P1001","absenceType":"Vacation","startDate":"2026-12-20","endDate":"2026-12-21","status":"SUBMITTED"}}` |
 | verify approved absence via hcm_get_absence | PASS | `{"AbsenceId":"A2001","personNumber":"P1001","absenceType":"Vacation","startDate":"2026-12-20","endDate":"2026-12-21","status":"SUBMITTED"}` |
 | verify via hcm_search_absences | PASS | `items=1` |
 | hcm_rest_mutate blocklisted path → fail/block | PASS | `{"error":"Path blocked by policy (Oracle-internal / CE generative AI style paths are not allowed): ce/generativeAi/chat"}` |
@@ -62,7 +62,7 @@
 
 | Step | Result | Detail |
 | --- | --- | --- |
-| listTools — approval tools PRESENT (v0.3 sensitive gate) | PASS | `count=240; hasApprovalTools=true` |
+| listTools — approval tools PRESENT (v0.3 sensitive gate) | PASS | `count=243; hasApprovalTools=true` |
 | hcm_create_worker immediate | PASS | `{"WorkerId":"W2003","PersonNumber":"P-E2E-W","DisplayName":"E2E Writer","FirstName":"E2E","LastName":"Writer","emails":[],"phones":[],"nationalIdentifiers":[],"legislativeInfo":[],"addresses":[],"name` |
 | hcm_update_worker immediate | PASS | `{"WorkerId":"W2003","PersonNumber":"P-E2E-W","DisplayName":"E2E Writer Updated","FirstName":"E2E","LastName":"Writer","emails":[],"phones":[],"nationalIdentifiers":[],"legislativeInfo":[],"addresses":` |
 | hcm_create_absence immediate | PASS | `{"AbsenceId":"A2004","personNumber":"P1002","absenceType":"Vacation","startDate":"2027-01-01","endDate":"2027-01-03","status":"SUBMITTED"}` |
@@ -81,7 +81,7 @@
 
 | Step | Result | Detail |
 | --- | --- | --- |
-| tool count >= 100 | PASS | `count=240` |
+| tool count >= 100 | PASS | `count=243` |
 | hcm_setup_status | PASS | `{"baseUrl":"http://127.0.0.1:9090/hcmRestApi","apiVersion":"11.13.18.05","authMode":"basic","writeMode":false,"sensitiveEnabled":false,"sensitiveWriteEnabled":false,"username":"demo","clientId":null,"` |
 | hcm_list_atom_entries | PASS | `{"items":[{"entryId":"AE1","title":"Worker 1001 updated","updated":"2026-09-18T10:00:00Z","collection":"empupdate","changeType":"UPDATE","raw":{"EntryId":"AE1","Title":"Worker 1001 updated","Updated":` |
 | hcm_search_requisitions | PASS | `{"items":[{"RequisitionId":"REQ1","RequisitionNumber":"R-100","Title":"Software Engineer","Status":"OPEN","skills":[{"SkillId":"SK1","Name":"Java","Importance":1}],"attachments":[{"AttachmentId":"RATT` |
@@ -91,10 +91,10 @@
 
 | Step | Result | Detail |
 | --- | --- | --- |
-| pending payload never includes approval token | PASS | `{"pending_approval":true,"approval_id":"b2755808-7fe0-40a4-9fcf-754337a92b1d","tool":"hcm_create_absence","summary":"hcm_create_absence(body={\"personNumber\":\"P1001\",\"absenceType\":\"Vacation\",\"startDate\":\"2026-11-01\"})","expires_at":"2026-09-20T11:36:11.211Z","message":"Write queued for a ` |
+| pending payload never includes approval token | PASS | `{"pending_approval":true,"approval_id":"6d3b3dd5-1dc2-4a6b-8d2d-5095b27a181a","tool":"hcm_create_absence","summary":"hcm_create_absence(body={\"personNumber\":\"P1001\",\"absenceType\":\"Vacation\",\"startDate\":\"2026-11-01\"})","expires_at":"2026-09-20T11:55:28.372Z","message":"Write queued for a ` |
 | approve without token fails | PASS | `{"_raw":"MCP error -32602: Input validation error: Invalid arguments for tool hcm_approve_write: Required at approval_token"}` |
 | approve with wrong token fails | PASS | `{"error":"Invalid or missing approval_token. Pass the human/ops token from ORACLE_HCM_APPROVAL_TOKEN — it is never included in pending_approval payloads."}` |
-| deny with correct split-principal token works | PASS | `{"denied":true,"approval_id":"b2755808-7fe0-40a4-9fcf-754337a92b1d","tool":"hcm_create_absence"}` |
+| deny with correct split-principal token works | PASS | `{"denied":true,"approval_id":"6d3b3dd5-1dc2-4a6b-8d2d-5095b27a181a","tool":"hcm_create_absence"}` |
 | path traversal rest_get blocked | PASS | `{"error":"Path traversal rejected: workers/../ce/foo"}` |
 | encoded .. rest_get blocked | PASS | `{"error":"Path traversal rejected: workers/%2e%2e/ce"}` |
 | scheme rest_get blocked | PASS | `{"error":"Absolute / scheme-relative paths are not allowed: https://evil.example/workers"}` |
@@ -106,14 +106,14 @@
 
 | Step | Result | Detail |
 | --- | --- | --- |
-| tool count >= 170 | PASS | `count=240` |
+| tool count >= 170 | PASS | `count=243` |
 | v0.6 tools registered | PASS | `all present` |
 | hcm_search_check_ins | PASS | `{"items":[{"CheckInDocumentId":"CI1","CheckInId":"CI1","PersonNumber":"P1002","ManagerPersonNumber":"P1001","ScheduledDate":"2026-09-25","Status":"SCHEDULED","Notes":"Career chat"}],"count":1,"hasMore` |
 | hcm_search_learning_assignments | PASS | `{"items":[{"LearningRecordId":"LE1","EnrollmentId":"LE1","PersonNumber":"P1002","CourseName":"Fusion HCM Basics","Status":"ENROLLED","DueDate":"2026-10-01","AssignmentId":"LA1","completionDetails":[]}` |
 | hcm_search_document_records | PASS | `{"items":[{"DocumentRecordId":"DR1","PersonNumber":"P1001","DocumentType":"I9","FileName":"i9.pdf","UploadedAt":"2026-01-10T10:00:00Z","Status":"ACTIVE"}],"count":1,"hasMore":false}` |
 | hcm_search_talent_pools | PASS | `{"items":[{"TalentPoolId":"TPOL1","PoolName":"High Potential IC","Status":"A","MemberCount":2}],"count":1,"hasMore":false}` |
 | hcm_preview_write dry-run | PASS | `{"dry_run":true,"toolName":"hcm_create_absence","args":{"body":{"personNumber":"P1001","absenceType":"Vacation","startDate":"2026-11-15"}},"inferredMethod":"POST","inferredPath":null,"writeMode":false` |
-| hcm_recipe_transfer → pending_approval | PASS | `{"pending_approval":true,"approval_id":"1512b71d-c00a-4410-b307-798b0691d2e6","tool":"hcm_recipe_transfer","summary":"hcm_recipe_transfer(workerId=1001, body={\"OrganizationId\":\"O1\"})","expires_at"` |
+| hcm_recipe_transfer → pending_approval | PASS | `{"pending_approval":true,"approval_id":"5dfcdd47-4b71-4934-bfef-0dbbb4ceeb83","tool":"hcm_recipe_transfer","summary":"hcm_recipe_transfer(workerId=1001, body={\"OrganizationId\":\"O1\"})","expires_at"` |
 | hcm_atom_poll | PASS | `{"feedId":"atom:employee/empupdate","checkpoint":null,"cursorUsed":null,"count":2,"entries":[{"entryId":"AE1","title":"Worker 1001 updated","updated":"2026-09-18T10:00:00Z","collection":"empupdate","c` |
 | hcm_field_map | PASS | `{"entries":[{"oracle":"PersonNumber","friendly":"person_number","domain":"worker"},{"oracle":"WorkerId","friendly":"worker_id","domain":"worker"},{"oracle":"DisplayName","friendly":"display_name","dom` |
 ## G) v0.9 official children (write mode)
@@ -125,6 +125,13 @@
 | hcm_list_requisition_skills | PASS | `{"items":[{"SkillId":"SK1","Name":"Java","Importance":1,"RequisitionId":"REQ1"}],"count":1,"hasMore":false}` |
 | hcm_list_jobs_lov | PASS | `{"items":[{"JobId":"J1","JobCode":"SWE","Name":"Software Engineer","Status":"A"},{"JobId":"J2","JobCode":"PM","Name":"Product Manager","Status":"A"}],"count":2,"hasMore":false}` |
 | hcm_atom_poll workrelshipupdate | PASS | `{"feedId":"atom:employee/workrelshipupdate","checkpoint":null,"cursorUsed":null,"count":1,"entries":[{"entryId":"AE4","title":"Work relationship update 1001","updated":"2026-09-19T14:00:00Z","collecti` |
+## H) v0.10 ADF describe (no GraphQL)
+
+| Step | Result | Detail |
+| --- | --- | --- |
+| hcm_adf_describe workers | PASS | `{"resource":"workers","attributes":[{"name":"PersonId","type":"integer","updatable":true,"mandatory":true,"queryable":true,"allowChanges":"inCreate","precision":18},{"name":"WorkerId","type":"string",` |
+| hcm_adf_catalog | PASS | `{"metadataMode":"minimal","count":51,"resources":["absencePlansLOV","absenceTypesLOV","absences","allocatedChecklists","areasOfResponsibility","assignmentCosting","benefitEnrollments","businessProcess` |
+| hcm_fusion_api_surface GraphQL unsupported | PASS | `{"supported":false,"officialEndpoint":null,"note":"Oracle Fusion Cloud HCM does not publish a GraphQL API. Official surfaces are ADF REST (/hcmRestApi/resources/{version}), ADF /describe (+ OpenAPI Ac` |
 
 ## Notes
 
@@ -132,6 +139,7 @@
 - `hcm_rest_mutate` to CE/generative-AI style paths is rejected by allowlist/blocklist before pending approval or execution.
 - v0.7: `ORACLE_HCM_APPROVAL_TOKEN` is never returned in pending payloads; HTTP/gRPC bearer is fail-closed; SENSITIVE resource roots apply to `hcm_rest_get`.
 - v0.9: official worker children, timeEventRequests, work-structure LOVs, recruiting/benefit children, documentRecords actions, If-Match 412.
+- v0.10: ADF /describe + catalog + OpenAPI Accept. Fusion HCM has no GraphQL.
 - Dummy HCM covers official 11.13.18.05 paths including atomservlet, recruiting, benefits, payslips (gated), checklists, performance, learning, recipes.
 
 ## F) Setup UI + Approval UI (live)
@@ -140,7 +148,7 @@
 | --- | --- | --- |
 | setup-ui GET / | PASS | `bytes=9615` |
 | setup-ui /api/meta unofficial | PASS | `{"service":"oracle-hcm-mcp-setup-ui","unofficial":true,"disclaimer":"Not an Oracle product. Not affiliated with, endorsed by, or supported by Oracle Corporation.","projectRoot":"/tmp/oracle-hcm-mcp","` |
-| setup-ui test-connection against dummy | PASS | `{"ok":true,"status":200,"baseUrl":"http://127.0.0.1:9090/hcmRestApi","apiVersion":"11.13.18.05","authMode":"basic","latencyMs":18,"note":"Probe succeeded (or non-5xx). Secrets were not logged or returned."}` |
+| setup-ui test-connection against dummy | PASS | `{"ok":true,"status":200,"baseUrl":"http://127.0.0.1:9090/hcmRestApi","apiVersion":"11.13.18.05","authMode":"basic","latencyMs":15,"note":"Probe succeeded (or non-5xx). Secrets were not logged or returned."}` |
 | setup-ui test-connection does not echo password | PASS | `secretLeakCheck=true` |
 | setup-ui CSRF Origin 403 | PASS | `status=403` |
 | setup-ui SSRF file:// rejected | PASS | `{"ok":false,"error":"baseUrl must be http(s)"}` |

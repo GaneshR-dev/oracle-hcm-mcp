@@ -1,6 +1,6 @@
-# Tools (v0.9)
+# Tools (v0.10)
 
-Unofficial MCP tool catalog. Not an Oracle product. 240 tools. Official Fusion 11.13.18.05 paths only.
+Unofficial MCP tool catalog. Not an Oracle product. 243 tools. Official Fusion 11.13.18.05 paths only.
 
 Dropped (no public HCM REST equivalent): `hcm_search_review_cycles`, `hcm_get_review_cycle`,
 `hcm_search_feedback`, `hcm_get_feedback`, `hcm_create_feedback`, `hcm_otbi_query`,
@@ -12,6 +12,7 @@ Dropped (no public HCM REST equivalent): `hcm_search_review_cycles`, `hcm_get_re
 ## Meta / setup
 
 `hcm_health`, `hcm_whoami`, `hcm_list_resources`, `hcm_describe_resource`,
+`hcm_adf_describe`, `hcm_adf_catalog`, `hcm_fusion_api_surface`,
 `hcm_setup_status`, `hcm_test_connection`, `hcm_emit_mcp_config`, `hcm_export_config`
 
 ## Workers / assignments

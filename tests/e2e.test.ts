@@ -294,6 +294,16 @@ describe('dummy HCM 404s invented collections (Fusion-shaped)', () => {
     await ok('jobsLov');
     await ok('recruitingJobRequisitions/REQ1/child/skills');
     await ok('benefitEnrollments/BE1/child/costs');
+    await ok('workers/describe');
+    await ok('describe?metadataMode=minimal');
+    await ok('workers/1001/child/addresses/describe');
+  });
+
+  it('404s GraphQL — not a Fusion HCM API', async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/graphql`, { headers: auth() });
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { graphql?: { supported?: boolean } };
+    expect(body.graphql?.supported).toBe(false);
   });
 
   it('404s invented actions; serves official loadProjectedBalance', async () => {

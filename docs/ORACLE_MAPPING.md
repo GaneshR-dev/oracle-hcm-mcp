@@ -56,4 +56,6 @@ MCP **tool names** stay stable where a Fusion equivalent exists; only internals 
 
 Field names and finders vary by Fusion release. The MCP client sends JSON as provided.
 
+**Schema:** official ADF `GET {collection}/describe` (not GraphQL). Catalog: `GET /describe?metadataMode=minimal`. OpenAPI: `Accept: application/vnd.oracle.openapi3+json`. See [ADF_SCHEMA.md](ADF_SCHEMA.md).
+
 Auth: Basic, OAuth client-credentials, Bearer. HCM **RBAC** always applies on the real server.

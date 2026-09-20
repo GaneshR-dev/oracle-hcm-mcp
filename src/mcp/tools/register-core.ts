@@ -89,13 +89,19 @@ function registerMeta(server: McpServer, ctx: ToolContext): void {
   }), ctx, 'hcm_list_resources'));
 
   server.registerTool('hcm_describe_resource', {
-    description: 'Describe a curated resource by name (workers, planBalances, …).',
-    inputSchema: { name: z.string().describe('Resource name, e.g. workers') },
+    description:
+      'Describe a curated resource by name (workers, planBalances, …). Pass live=true to GET official ADF /describe.',
+    inputSchema: {
+      name: z.string().describe('Resource name, e.g. workers'),
+      live: z.boolean().optional().describe('If true, GET {name}/describe from the pod (ADF schema)'),
+    },
     annotations: { readOnlyHint: true },
-  }, async ({ name }) => runRead(async () => {
+  }, async ({ name, live }) => runRead(async () => {
     const found = RESOURCE_CATALOG.find((r) => r.name === name || r.path === name);
     if (!found) throw new Error(`Unknown curated resource: ${name}`);
-    return found;
+    if (!live) return found;
+    const describe = await ctx.client.describeResource(found.path, { includeChildren: true });
+    return { ...found, live: true, describe };
   }, ctx, 'hcm_describe_resource'));
 }
 

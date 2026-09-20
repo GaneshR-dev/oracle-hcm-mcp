@@ -29,13 +29,19 @@ export function extractRootsFromOpenApi(doc: unknown): string[] {
         if (seg && !seg.includes('{') && /^[A-Za-z][A-Za-z0-9_]*$/.test(seg)) roots.add(seg);
       }
     }
-    const items = (rec.items ?? rec.Resources ?? rec.resources) as unknown;
+    const items = (rec.items ?? rec.resources) as unknown;
     if (Array.isArray(items)) {
       for (const it of items) {
         if (it && typeof it === 'object') {
           const n = (it as Record<string, unknown>).name ?? (it as Record<string, unknown>).Name;
           if (typeof n === 'string' && /^[A-Za-z][A-Za-z0-9_]*$/.test(n)) roots.add(n);
         }
+      }
+    }
+    if (rec.Resources && typeof rec.Resources === 'object' && !Array.isArray(rec.Resources)) {
+      for (const k of Object.keys(rec.Resources as object)) {
+        if (BLOCKED.some((re) => re.test(k))) continue;
+        if (/^[A-Za-z][A-Za-z0-9_]*$/.test(k) && k !== 'describe') roots.add(k);
       }
     }
     for (const v of Object.values(rec)) visit(v);

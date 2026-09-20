@@ -10,14 +10,16 @@ Unofficial Model Context Protocol (MCP) server for **Oracle Fusion Cloud HCM** R
 
 ## Status
 
+v0.10 — official ADF `/describe` schema (resource + catalog + OpenAPI Accept). Fusion HCM has **no GraphQL**.
 v0.9 — remaining official Fusion worker children, timeEventRequests, work-structure LOVs,
 recruiting/benefit nested collections, documentRecords actions, dummy If-Match 412.
 v0.8 — official Fusion 11.13.18.05 collection names only (no invented roots).
 v0.7 security control-plane remains: split-principal approvals, HTTP/gRPC bearer,
 path canonicalization, SENSITIVE resource **and child** gates (`nationalIdentifiers`,
 `legislativeInfo`), Fusion `REST-Framework-Version` / `If-Match`, ADF `q=` quoting.
-Atom CDC uses `/hcmRestApi/atomservlet/{workspace}/{collection}`. **240 tools**.
-Perfect ADF coverage is **not** a goal. See [docs/ORACLE_MAPPING.md](docs/ORACLE_MAPPING.md).
+Atom CDC uses `/hcmRestApi/atomservlet/{workspace}/{collection}`. **243 tools**.
+Perfect ADF coverage is **not** a goal. See [docs/ORACLE_MAPPING.md](docs/ORACLE_MAPPING.md)
+and [docs/ADF_SCHEMA.md](docs/ADF_SCHEMA.md).
 
 ### Honest coverage
 
@@ -145,7 +147,7 @@ Auth note: credentials open the HTTP door; **HCM RBAC** still decides what the u
 
 ## Tools (v0.5)
 
-**Meta / setup:** `hcm_health`, `hcm_whoami`, `hcm_list_resources`, `hcm_describe_resource`, `hcm_setup_status`, `hcm_test_connection`, `hcm_emit_mcp_config`, `hcm_export_config`
+**Meta / setup:** `hcm_health`, `hcm_whoami`, `hcm_list_resources`, `hcm_describe_resource`, `hcm_adf_describe`, `hcm_adf_catalog`, `hcm_fusion_api_surface`, `hcm_setup_status`, `hcm_test_connection`, `hcm_emit_mcp_config`, `hcm_export_config`
 
 **Workers:** `hcm_search_workers`, `hcm_get_worker`, `hcm_get_worker_assignments`, `hcm_create_worker`, `hcm_update_worker`
 

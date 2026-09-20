@@ -2,6 +2,16 @@
 
 > Not an Oracle product. Priorities may change. Perfect ADF coverage is **not** a goal.
 
+## Shipped in v0.10
+
+| # | Capability | Notes |
+|---|------------|--------|
+| 1 | **Live ADF `/describe`** | `GET {collection}/describe` — attributes, queryable, finders, children, actions |
+| 2 | **Catalog describe** | `GET /describe?metadataMode=minimal\|list` (+ `includeChildren`) |
+| 3 | **OpenAPI 3 metadata** | `Accept: application/vnd.oracle.openapi3+json` on describe |
+| 4 | **Nested child describe** | `workers/{id}/child/{child}/describe` |
+| 5 | **GraphQL investigated** | Fusion HCM has **no** GraphQL API — dummy 404s `/graphql`; `hcm_fusion_api_surface` |
+
 ## Shipped in v0.9
 
 | # | Capability | Notes |
@@ -94,3 +104,4 @@ payslip field parity, HTTP/gRPC e2e.
 - Exhaustive ADF finder catalog for *all* LOVs
 - Full OTBI execute / BI Publisher
 - npm publish (intentionally out of scope for this tree)
+- **GraphQL** — Fusion Cloud HCM has no public GraphQL API (ADF `/describe` is the schema)
