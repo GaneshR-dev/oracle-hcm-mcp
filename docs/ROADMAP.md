@@ -2,6 +2,32 @@
 
 > Not an Oracle product. Priorities may change. Perfect ADF coverage is **not** a goal.
 
+## Shipped in v0.9
+
+| # | Capability | Notes |
+|---|------------|--------|
+| 1 | **Worker children pack** | Official `workers/{id}/child/{addresses,names,photos,citizenships,visasPermits,passports,disabilities,driverLicenses,ethnicities,religions,externalIdentifiers,otherCommunicationAccounts,messages}` |
+| 2 | **Assignment gradeSteps** | Nested official child, not `gradeStepsLOV` |
+| 3 | **timeEventRequests** | Clock in/out (distinct from `timeRecordEventRequests`) |
+| 4 | **Work-structure LOVs** | `jobsLov`, `gradesLov`, `gradeLaddersLov`, `gradeRatesLOV`, `locationsLov` |
+| 5 | **Recruiting children** | skills / attachments / publishedJobs / candidate citizenships (no CE/UI) |
+| 6 | **Benefits children** | `costs`, `providers` (plus existing dependents) |
+| 7 | **documentRecords actions** | downloadAttachments, generateDraftLetter, findByAdvancedSearchQuery |
+| 8 | **Atom workrelshipupdate** | Official employee feed |
+| 9 | **Dummy If-Match** | PATCH/DELETE 412 unless `If-Match: *` or matching ETag |
+| 10 | **SENSITIVE children** | addresses, visas, passports, disabilities, licenses, ethnicities, religions, externalIdentifiers |
+
+## Shipped in v0.8
+
+| # | Capability | Notes |
+|---|------------|--------|
+| 1 | **Official Fusion paths only** | Allowlist is 11.13.18.05 collection names; invented aliases 404 |
+| 2 | **Nested worker children** | emails/phones/NIDs/legislative/assignments via `workers/{id}/child/...` |
+| 3 | **Time** | `timeRecordGroups` + `POST timeRecordEventRequests` (no `timeCards`) |
+| 4 | **Atom servlet** | `/hcmRestApi/atomservlet/{workspace}/{collection}` — not `resources/atomfeeds` |
+| 5 | **Dropped invented tools** | review cycles, feedback, OTBI, FSCM bankAccounts, interviews, enroll/optOut, forceClose |
+| 6 | **SENSITIVE children** | `nationalIdentifiers` / `legislativeInfo` gated even under `workers` |
+
 ## Shipped in v0.7
 
 | # | Capability | Notes |

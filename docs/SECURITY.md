@@ -39,7 +39,9 @@ the curated allowlist. Invalid paths are treated as blocked.
 
 Payslip, bank account, national identifier, compensation, salary basis / grade step LOVs,
 offer letter fields, payroll costing / element entries, calculation cards, and
-`workerLegislativeData` are **SENSITIVE**.
+`workers/{id}/child/nationalIdentifiers`, `legislativeInfo`, `addresses`, `visasPermits`,
+`passports`, `disabilities`, `driverLicenses`, `ethnicities`, `religions`, and
+`externalIdentifiers` are **SENSITIVE**.
 
 Roots are enforced in `HcmClient` so `hcm_rest_get` / lov / batch cannot bypass the
 named-tool gate.

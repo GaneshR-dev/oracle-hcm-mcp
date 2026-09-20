@@ -77,7 +77,10 @@ describe('v0.7 SENSITIVE roots on generic REST', () => {
   it('marks payslip/bank/national ID roots sensitive', () => {
     expect(isSensitiveRoot('payslips')).toBe(true);
     expect(isSensitivePath('payslips/PS1')).toBe(true);
-    expect(isSensitivePath('bankAccounts/1')).toBe(true);
+    expect(isSensitivePath('salaries/CH1')).toBe(true);
+    expect(isSensitivePath('workers/1001/child/nationalIdentifiers')).toBe(true);
+    expect(isSensitivePath('workers/1001/child/addresses')).toBe(true);
+    expect(isSensitivePath('workers/1001/child/visasPermits')).toBe(true);
     expect(isSensitivePath('workers/1001')).toBe(false);
   });
 

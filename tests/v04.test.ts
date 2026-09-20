@@ -114,7 +114,7 @@ describe('v0.4 Atom CDC', () => {
       const poll1 = parse(
         await client.callTool({
           name: 'hcm_atom_poll',
-          arguments: { collection: 'workers', limit: 10 },
+          arguments: { collection: 'empupdate', limit: 10 },
         }),
       );
       expect(poll1.count).toBeGreaterThan(0);
@@ -122,7 +122,7 @@ describe('v0.4 Atom CDC', () => {
       const consume = parse(
         await client.callTool({
           name: 'hcm_atom_consume',
-          arguments: { collection: 'workers', limit: 10 },
+          arguments: { collection: 'empupdate', limit: 10 },
         }),
       );
       expect(consume.consumed).toBeGreaterThan(0);
@@ -131,7 +131,7 @@ describe('v0.4 Atom CDC', () => {
       const poll2 = parse(
         await client.callTool({
           name: 'hcm_atom_poll',
-          arguments: { collection: 'workers', limit: 10 },
+          arguments: { collection: 'empupdate', limit: 10 },
         }),
       );
       expect(poll2.count).toBe(0);
@@ -139,7 +139,7 @@ describe('v0.4 Atom CDC', () => {
       const xmlFeed = parse(
         await client.callTool({
           name: 'hcm_get_atom_feed',
-          arguments: { collection: 'workers', format: 'atom' },
+          arguments: { collection: 'empupdate', format: 'atom' },
         }),
       );
       expect(xmlFeed.format).toBe('atom');

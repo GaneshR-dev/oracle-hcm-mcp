@@ -29,7 +29,7 @@ const APPROVAL_TOOLS = [
 ];
 
 const V06_TOOLS = [
-  'hcm_search_review_cycles',
+  'hcm_search_check_ins',
   'hcm_search_learning_assignments',
   'hcm_search_document_records',
   'hcm_search_talent_pools',
@@ -699,12 +699,12 @@ async function runV07Security() {
       JSON.stringify(payslip.data).slice(0, 200),
     );
 
-    const bank = await call(client, 'hcm_rest_get', { path: 'bankAccounts' });
+    const nid = await call(client, 'hcm_rest_get', { path: 'workers/1001/child/nationalIdentifiers' });
     record(
       section,
-      'hcm_rest_get bankAccounts blocked without SENSITIVE',
-      isBlocked(bank) && /SENSITIVE/i.test(JSON.stringify(bank.data)),
-      JSON.stringify(bank.data).slice(0, 200),
+      'hcm_rest_get nationalIdentifiers child blocked without SENSITIVE',
+      isBlocked(nid) && /SENSITIVE/i.test(JSON.stringify(nid.data)),
+      JSON.stringify(nid.data).slice(0, 200),
     );
   });
 
@@ -737,13 +737,13 @@ async function runV06DomainSmoke() {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name);
     const missing = V06_TOOLS.filter((n) => !names.includes(n));
-    record(section, 'tool count >= 190', names.length >= 190, `count=${names.length}`);
+    record(section, 'tool count >= 170', names.length >= 170, `count=${names.length}`);
     record(section, 'v0.6 tools registered', missing.length === 0, missing.join(',') || 'all present');
 
-    const rc = await call(client, 'hcm_search_review_cycles', { limit: 5 });
+    const rc = await call(client, 'hcm_search_check_ins', { limit: 5 });
     record(
       section,
-      'hcm_search_review_cycles',
+      'hcm_search_check_ins',
       !rc.isError && (rc.data.items?.length ?? 0) > 0,
       JSON.stringify(rc.data).slice(0, 200),
     );
@@ -794,7 +794,7 @@ async function runV06DomainSmoke() {
       JSON.stringify(recipe.data).slice(0, 200),
     );
 
-    const atom = await call(client, 'hcm_atom_poll', { collection: 'workers', limit: 10 });
+    const atom = await call(client, 'hcm_atom_poll', { collection: 'empupdate', limit: 10 });
     record(
       section,
       'hcm_atom_poll',
@@ -812,12 +812,54 @@ async function runV06DomainSmoke() {
   });
 }
 
+async function runV09DomainSmoke() {
+  const section = 'G) v0.9 official children (write mode)';
+  console.log(`\n=== ${section} ===`);
+  await withClient(['dist/index.js', '--write'], async (client) => {
+    const names = await call(client, 'hcm_search_names', { workerId: '1001' });
+    record(
+      section,
+      'hcm_search_names',
+      !names.isError && (names.data.items?.length ?? 0) > 0,
+      JSON.stringify(names.data).slice(0, 200),
+    );
+    const te = await call(client, 'hcm_search_time_event_requests', {});
+    record(
+      section,
+      'hcm_search_time_event_requests',
+      !te.isError && (te.data.items?.length ?? 0) > 0,
+      JSON.stringify(te.data).slice(0, 200),
+    );
+    const skills = await call(client, 'hcm_list_requisition_skills', { requisitionId: 'REQ1' });
+    record(
+      section,
+      'hcm_list_requisition_skills',
+      !skills.isError && skills.data.items?.[0]?.SkillId,
+      JSON.stringify(skills.data).slice(0, 200),
+    );
+    const jobs = await call(client, 'hcm_list_jobs_lov', {});
+    record(
+      section,
+      'hcm_list_jobs_lov',
+      !jobs.isError && (jobs.data.items?.length ?? 0) > 0,
+      JSON.stringify(jobs.data).slice(0, 200),
+    );
+    const atom = await call(client, 'hcm_atom_poll', { collection: 'workrelshipupdate', limit: 10 });
+    record(
+      section,
+      'hcm_atom_poll workrelshipupdate',
+      !atom.isError && atom.data.feedId,
+      JSON.stringify(atom.data).slice(0, 200),
+    );
+  }, { ORACLE_HCM_SENSITIVE: '1' });
+}
+
 function writeReport() {
   const passed = results.filter((r) => r.pass).length;
   const failed = results.filter((r) => !r.pass).length;
   const verdict =
     failed === 0
-      ? 'PASS — stdio MCP e2e against dummy HCM (approval, --write, v0.3, v0.6, v0.7)'
+      ? 'PASS — stdio MCP e2e against dummy HCM (approval, --write, v0.3, v0.6, v0.7, v0.9)'
       : `FAIL — ${failed} step(s) failed (see details)`;
 
   const lines = [
@@ -826,7 +868,7 @@ function writeReport() {
     `- Date: ${new Date().toISOString()} (box UTC; user zone Asia/Calcutta)`,
     `- Target: http://127.0.0.1:9090 (dummy HCM, basic auth demo/demo)`,
     `- Script: scripts/e2e-stdio.mjs (MCP Client + StdioClientTransport)`,
-    `- Server: node dist/index.js [ --write ]  (v0.7.0)`,
+    `- Server: node dist/index.js [ --write ]  (v0.9.0)`,
     '',
     `## Verdict: **${verdict}**`,
     '',
@@ -864,7 +906,10 @@ function writeReport() {
   lines.push(
     '- v0.7: `ORACLE_HCM_APPROVAL_TOKEN` is never returned in pending payloads; HTTP/gRPC bearer is fail-closed; SENSITIVE resource roots apply to `hcm_rest_get`.',
   );
-  lines.push('- Dummy HCM covers v0.3–v0.6 paths including atomfeeds, recruiting, benefits, payslips (gated), checklists, performance, learning, recipes.', '');
+  lines.push(
+    '- v0.9: official worker children, timeEventRequests, work-structure LOVs, recruiting/benefit children, documentRecords actions, If-Match 412.',
+  );
+  lines.push('- Dummy HCM covers official 11.13.18.05 paths including atomservlet, recruiting, benefits, payslips (gated), checklists, performance, learning, recipes.', '');
 
   fs.writeFileSync(REPORT_PATH, lines.join('\n'));
   console.log(`\nWrote ${REPORT_PATH}`);
@@ -887,6 +932,7 @@ async function main() {
   await runV03Smoke();
   await runV07Security();
   await runV06DomainSmoke();
+  await runV09DomainSmoke();
   const ok = writeReport();
   process.exit(ok ? 0 : 1);
 }

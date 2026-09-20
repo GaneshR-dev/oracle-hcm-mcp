@@ -2,6 +2,10 @@
  * Allowlist / blocklist for generic REST paths under HCM resources.
  * Canonicalizes (decode, reject .. / schemes) BEFORE root matching.
  * Blocks Oracle-internal and generative-AI style CE endpoints.
+ *
+ * Roots are Fusion HCM REST collection names from
+ * https://docs.oracle.com/en/cloud/saas/human-resources/farws/rest-endpoints.html
+ * (version 11.13.18.05). Invented aliases are not listed.
  */
 
 export type CanonicalResourcePath = {
@@ -25,73 +29,63 @@ const BLOCKED_PATTERNS: RegExp[] = [
 ];
 
 /**
- * Curated resource roots allowed for generic get/mutate.
- * Primary Fusion names first; legacy aliases kept for compatibility.
+ * Official Fusion HCM REST collection roots only.
+ * Child resources (emails, phones, assignments, tasks, …) are allowlisted
+ * because canonicalize uses the first segment as root (e.g. workers/{id}/child/emails).
+ * Atom feeds are NOT resources/ collections — see src/policy/atom.ts.
  */
 const ALLOWED_ROOTS = [
   'workers',
+  'publicWorkers',
+  'emps',
   'absences',
   'planBalances',
-  'absencesBalances',
   'areasOfResponsibility',
   'allocatedChecklists',
   'businessProcessNotifications',
-  'workflowNotifications',
-  'workerAssignments',
-  'emps',
-  'publicWorkers',
   'hcmContacts',
-  'workerEmails',
-  'workerPhones',
-  'nationalIdentifiers',
   'positions',
   'organizations',
   'locations',
+  'locationsV2',
   'jobs',
   'grades',
-  'timeRecords',
-  'timeCards',
-  'workSchedules',
+  'jobFamilies',
   'talentPersonProfiles',
-  'goals',
-  'performanceDocuments',
-  'learningEnrollments',
+  'documentRecords',
   'payrollRelationships',
-  'payslips',
-  'bankAccounts',
   'personalPaymentMethods',
-  'salaryBases',
+  'payslips',
   'elementEntries',
-  'calculationCards',
-  'compensationHistories',
+  'benefitEnrollments',
   'recruitingJobRequisitions',
   'recruitingCandidates',
-  'benefitEnrollments',
-  'absenceTypes',
-  'absencePlans',
   'recruitingJobOffers',
-  'recruitingInterviews',
-  'recruitingCandidateAttachments',
-  'workerLegislativeData',
-  'assignmentHistories',
-  'atomfeeds',
-  'atomFeeds',
-  'reviewCycles',
-  'performanceFeedback',
-  'checkIns',
-  'learningAssignments',
-  'learningCompletions',
-  'gradeSteps',
-  'jobFamilies',
-  'departments',
-  'documentRecords',
   'workerJourneys',
-  'journeyTasks',
-  'benefitDependents',
-  'lifeEvents',
-  'talentPools',
-  'payrollCosting',
-  'otbiReports',
+  'workerJourneyTasks',
+  'timeRecordGroups',
+  'timeRecordEventRequests',
+  'workforceScheduleDefinitions',
+  'goalPlans',
+  'performanceEvaluations',
+  'checkInDocuments',
+  'learnerLearningRecords',
+  'salaryBasisLov',
+  'calculationEntries',
+  'salaries',
+  'absenceTypesLOV',
+  'absencePlansLOV',
+  'gradeStepsLOV',
+  'lifeEventsLOV',
+  'talentPoolsLOV',
+  'assignmentCosting',
+  'payrollRelationshipCosting',
+  'timeEventRequests',
+  'jobsLov',
+  'gradesLov',
+  'gradeLaddersLov',
+  'gradeRatesLOV',
+  'locationsLov',
 ];
 
 export function canonicalizeResourcePath(path: string): CanonicalResourcePath {

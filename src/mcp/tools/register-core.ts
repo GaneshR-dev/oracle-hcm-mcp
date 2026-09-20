@@ -1,41 +1,53 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolContext } from './helpers.js';
-import { gateWrite, runRead, jsonResult, errorResult, bindExecutor, recordAudit, executeApproved, requireApprovalToken } from './helpers.js';
+import { gateWrite, runRead, jsonResult, errorResult, bindExecutor, recordAudit, executeApproved, requireApprovalToken, listWorkerAssignments } from './helpers.js';
 import { ALLOWED_ROOTS, assertAllowlisted } from '../../policy/allowlist.js';
 
 export const RESOURCE_CATALOG = [
-  { name: 'workers', path: 'workers', description: 'HCM workers (person + work relationships)' },
-  { name: 'absences', path: 'absences', description: 'Absence entries' },
-  { name: 'planBalances', path: 'planBalances', description: 'Absence plan balances' },
+  { name: 'workers', path: 'workers', description: 'HCM workers (person + nested emails/phones/NIDs/workRelationships)' },
+  { name: 'publicWorkers', path: 'publicWorkers', description: 'Public workers view' },
+  { name: 'emps', path: 'emps', description: 'Employees collection (HCM emps)' },
+  { name: 'absences', path: 'absences', description: 'Absence entries; loadProjectedBalance action' },
+  { name: 'planBalances', path: 'planBalances', description: 'Absence plan balances (finder findByBalanceAsOfDate)' },
   { name: 'areasOfResponsibility', path: 'areasOfResponsibility', description: 'Areas of responsibility (AOR)' },
   { name: 'allocatedChecklists', path: 'allocatedChecklists', description: 'Allocated checklists; tasks via child/allocatedTasks' },
   { name: 'businessProcessNotifications', path: 'businessProcessNotifications', description: 'Business process notifications inbox' },
-  { name: 'workerAssignments', path: 'workerAssignments', description: 'Worker assignments' },
-  { name: 'organizations', path: 'organizations', description: 'Organizations / departments LOV' },
-  { name: 'locations', path: 'locations', description: 'Locations LOV' },
+  { name: 'organizations', path: 'organizations', description: 'Organizations / departments' },
+  { name: 'locations', path: 'locations', description: 'Locations' },
+  { name: 'locationsV2', path: 'locationsV2', description: 'Locations V2' },
   { name: 'jobs', path: 'jobs', description: 'Jobs LOV' },
   { name: 'grades', path: 'grades', description: 'Grades LOV' },
-  { name: 'timeRecords', path: 'timeRecords', description: 'Time records' },
+  { name: 'jobFamilies', path: 'jobFamilies', description: 'Job families' },
+  { name: 'positions', path: 'positions', description: 'Positions LOV' },
+  { name: 'timeRecordGroups', path: 'timeRecordGroups', description: 'Time record groups; child/timeRecords' },
+  { name: 'timeRecordEventRequests', path: 'timeRecordEventRequests', description: 'Time record event requests (submit)' },
+  { name: 'workforceScheduleDefinitions', path: 'workforceScheduleDefinitions', description: 'Workforce schedule definitions' },
   { name: 'talentPersonProfiles', path: 'talentPersonProfiles', description: 'Talent person profiles' },
   { name: 'payrollRelationships', path: 'payrollRelationships', description: 'Payroll relationships (read-only)' },
-  { name: 'publicWorkers', path: 'publicWorkers', description: 'Public workers view' },
   { name: 'hcmContacts', path: 'hcmContacts', description: 'Worker contacts' },
-  { name: 'positions', path: 'positions', description: 'Positions LOV' },
   { name: 'recruitingJobRequisitions', path: 'recruitingJobRequisitions', description: 'Job requisitions' },
-  { name: 'recruitingCandidates', path: 'recruitingCandidates', description: 'Recruiting candidates' },
-  { name: 'benefitEnrollments', path: 'benefitEnrollments', description: 'Benefits enrollments' },
-  { name: 'absenceTypes', path: 'absenceTypes', description: 'Absence types LOV' },
-  { name: 'absencePlans', path: 'absencePlans', description: 'Absence plans LOV' },
-  { name: 'timeCards', path: 'timeCards', description: 'Time cards' },
-  { name: 'workSchedules', path: 'workSchedules', description: 'Work schedules' },
-  { name: 'goals', path: 'goals', description: 'Talent goals' },
-  { name: 'performanceDocuments', path: 'performanceDocuments', description: 'Performance documents' },
-  { name: 'learningEnrollments', path: 'learningEnrollments', description: 'Learning enrollments' },
+  { name: 'recruitingCandidates', path: 'recruitingCandidates', description: 'Recruiting candidates; child/attachments' },
+  { name: 'recruitingJobOffers', path: 'recruitingJobOffers', description: 'Recruiting job offers' },
+  { name: 'benefitEnrollments', path: 'benefitEnrollments', description: 'Benefits enrollments; child/dependents' },
+  { name: 'absenceTypesLOV', path: 'absenceTypesLOV', description: 'Absence types LOV' },
+  { name: 'absencePlansLOV', path: 'absencePlansLOV', description: 'Absence plans LOV' },
+  { name: 'goalPlans', path: 'goalPlans', description: 'Goal plans; child/performanceGoals' },
+  { name: 'performanceEvaluations', path: 'performanceEvaluations', description: 'Performance evaluations' },
+  { name: 'checkInDocuments', path: 'checkInDocuments', description: 'Check-in documents' },
+  { name: 'learnerLearningRecords', path: 'learnerLearningRecords', description: 'Learning records; child/completionDetails' },
   { name: 'payslips', path: 'payslips', description: 'Payslips (SENSITIVE)' },
-  { name: 'bankAccounts', path: 'bankAccounts', description: 'Bank accounts (SENSITIVE)' },
-  { name: 'nationalIdentifiers', path: 'nationalIdentifiers', description: 'National IDs (SENSITIVE)' },
-  { name: 'atomfeeds', path: 'atomfeeds', description: 'Atom change feeds' },
+  { name: 'personalPaymentMethods', path: 'personalPaymentMethods', description: 'Personal payment methods (SENSITIVE)' },
+  { name: 'salaries', path: 'salaries', description: 'Salaries (SENSITIVE)' },
+  { name: 'documentRecords', path: 'documentRecords', description: 'Person document records' },
+  { name: 'workerJourneys', path: 'workerJourneys', description: 'Worker journeys; child/tasks' },
+  { name: 'workerJourneyTasks', path: 'workerJourneyTasks', description: 'Worker journey tasks' },
+  { name: 'timeEventRequests', path: 'timeEventRequests', description: 'Clock in/out time event requests' },
+  { name: 'jobsLov', path: 'jobsLov', description: 'Jobs LOV' },
+  { name: 'gradesLov', path: 'gradesLov', description: 'Grades LOV' },
+  { name: 'gradeLaddersLov', path: 'gradeLaddersLov', description: 'Grade ladders LOV' },
+  { name: 'gradeRatesLOV', path: 'gradeRatesLOV', description: 'Grade rates LOV' },
+  { name: 'locationsLov', path: 'locationsLov', description: 'Locations LOV' },
 ];
 
 export function registerCoreTools(server: McpServer, ctx: ToolContext): void {
@@ -50,12 +62,7 @@ export function registerCoreTools(server: McpServer, ctx: ToolContext): void {
   registerTalent(server, ctx);
   registerPayroll(server, ctx);
   registerGeneric(server, ctx);
-  if (!ctx.writeMode) {
-    registerApproval(server, ctx);
-  } else {
-    // Still register approve/deny when sensitive tools may need approval under --write
-    registerApproval(server, ctx);
-  }
+  registerApproval(server, ctx);
 }
 
 function registerMeta(server: McpServer, ctx: ToolContext): void {
@@ -72,13 +79,13 @@ function registerMeta(server: McpServer, ctx: ToolContext): void {
   }, async () => runRead(() => ctx.client.whoami(), ctx, 'hcm_whoami'));
 
   server.registerTool('hcm_list_resources', {
-    description: 'List curated HCM resource roots supported by this unofficial MCP.',
+    description: 'List curated official Fusion HCM resource roots supported by this unofficial MCP.',
     inputSchema: {},
     annotations: { readOnlyHint: true },
   }, async () => runRead(async () => ({
     resources: RESOURCE_CATALOG,
     allowlisted_roots: ALLOWED_ROOTS,
-    note: 'Not an official Oracle catalog; curated for v0.3. Fusion path names used.',
+    note: 'Official 11.13.18.05 collection names only. Atom feeds use /hcmRestApi/atomservlet, not resources/.',
   }), ctx, 'hcm_list_resources'));
 
   server.registerTool('hcm_describe_resource', {
@@ -113,20 +120,17 @@ function registerWorkers(server: McpServer, ctx: ToolContext): void {
   }, async ({ workerId }) => runRead(() => ctx.client.getJson(`workers/${encodeURIComponent(workerId)}`), ctx, 'hcm_get_worker'));
 
   server.registerTool('hcm_get_worker_assignments', {
-    description: 'Deep-read worker assignments. Prefers workers/{id} expand; falls back to workerAssignments.',
+    description: 'Deep-read worker assignments via workers/{id}?expand=workRelationships.assignments (official nested path).',
     inputSchema: {
       workerId: z.string(),
       expand: z.string().optional().describe('ADF expand, default workRelationships.assignments'),
     },
     annotations: { readOnlyHint: true },
   }, async ({ workerId, expand }) => runRead(async () => {
-    try {
-      return await ctx.client.getJson(`workers/${encodeURIComponent(workerId)}`, {
-        expand: expand ?? 'workRelationships.assignments',
-      });
-    } catch {
-      return ctx.client.list('workerAssignments', { q: `WorkerId=${workerId}`, limit: 100 });
+    if (expand && expand !== 'workRelationships.assignments') {
+      return ctx.client.getJson(`workers/${encodeURIComponent(workerId)}`, { expand });
     }
+    return listWorkerAssignments(ctx.client, workerId);
   }, ctx, 'hcm_get_worker_assignments'));
 
   bindExecutor(ctx, 'hcm_create_worker', async (args) => ctx.client.postJson('workers', args.body));
@@ -369,8 +373,8 @@ function registerOrgLovs(server: McpServer, ctx: ToolContext): void {
   };
   listTool('hcm_search_organizations', 'organizations', 'Search organizations / departments.');
   getTool('hcm_get_organization', 'organizations', 'organizationId', 'Get organization by id.');
-  listTool('hcm_search_locations', 'locations', 'Search locations LOV.');
-  getTool('hcm_get_location', 'locations', 'locationId', 'Get location by id.');
+  listTool('hcm_search_locations', 'locationsV2', 'Search locations (official locationsV2).');
+  getTool('hcm_get_location', 'locationsV2', 'locationId', 'Get location by id (locationsV2).');
   listTool('hcm_search_jobs', 'jobs', 'Search jobs LOV.');
   getTool('hcm_get_job', 'jobs', 'jobId', 'Get job by id.');
   listTool('hcm_search_grades', 'grades', 'Search grades LOV (optional).');
@@ -379,7 +383,7 @@ function registerOrgLovs(server: McpServer, ctx: ToolContext): void {
 
 function registerTime(server: McpServer, ctx: ToolContext): void {
   server.registerTool('hcm_search_time_records', {
-    description: 'Search time records (Fusion timeRecords).',
+    description: 'Search time records via official timeRecordGroups (flattened child/timeRecords).',
     inputSchema: {
       q: z.string().optional(),
       finder: z.string().optional(),
@@ -387,16 +391,55 @@ function registerTime(server: McpServer, ctx: ToolContext): void {
       offset: z.number().int().nonnegative().optional(),
     },
     annotations: { readOnlyHint: true },
-  }, async (args) => runRead(() => ctx.client.list('timeRecords', {
-    q: args.q, finder: args.finder, limit: args.limit ?? 25, offset: args.offset ?? 0,
-  }), ctx, 'hcm_search_time_records'));
+  }, async (args) => runRead(async () => {
+    const groups = await ctx.client.list('timeRecordGroups', {
+      q: args.q, finder: args.finder, limit: args.limit ?? 25, offset: args.offset ?? 0,
+    });
+    const items: Record<string, unknown>[] = [];
+    for (const g of groups.items as { TimeRecordGroupId?: string; timeRecords?: Record<string, unknown>[] }[]) {
+      const nested = g.timeRecords;
+      if (Array.isArray(nested) && nested.length) {
+        for (const r of nested) items.push({ ...r, TimeRecordGroupId: g.TimeRecordGroupId });
+      } else if (g.TimeRecordGroupId) {
+        try {
+          const child = await ctx.client.list(
+            `timeRecordGroups/${encodeURIComponent(g.TimeRecordGroupId)}/child/timeRecords`,
+          );
+          for (const r of child.items as Record<string, unknown>[]) {
+            items.push({ ...r, TimeRecordGroupId: g.TimeRecordGroupId });
+          }
+        } catch {
+          /* skip */
+        }
+      }
+    }
+    return { items, count: items.length, hasMore: false, groups: groups.items };
+  }, ctx, 'hcm_search_time_records'));
 
   server.registerTool('hcm_get_time_record', {
-    description: 'Get a time record by id.',
+    description: 'Get a time record by id (searches timeRecordGroups/*/child/timeRecords).',
     inputSchema: { timeRecordId: z.string() },
     annotations: { readOnlyHint: true },
-  }, async ({ timeRecordId }) => runRead(() =>
-    ctx.client.getJson(`timeRecords/${encodeURIComponent(timeRecordId)}`), ctx, 'hcm_get_time_record'));
+  }, async ({ timeRecordId }) => runRead(async () => {
+    const groups = await ctx.client.list('timeRecordGroups', { limit: 50 });
+    for (const g of groups.items as { TimeRecordGroupId?: string; timeRecords?: Record<string, unknown>[] }[]) {
+      const nested = g.timeRecords ?? [];
+      const hit = nested.find(
+        (r) => String(r.timeRecordId ?? r.TimeRecordId ?? '') === timeRecordId,
+      );
+      if (hit) return hit;
+      if (g.TimeRecordGroupId) {
+        try {
+          return await ctx.client.getJson(
+            `timeRecordGroups/${encodeURIComponent(g.TimeRecordGroupId)}/child/timeRecords/${encodeURIComponent(timeRecordId)}`,
+          );
+        } catch {
+          /* next group */
+        }
+      }
+    }
+    throw new Error(`Time record ${timeRecordId} not found under timeRecordGroups`);
+  }, ctx, 'hcm_get_time_record'));
 }
 
 function registerTalent(server: McpServer, ctx: ToolContext): void {

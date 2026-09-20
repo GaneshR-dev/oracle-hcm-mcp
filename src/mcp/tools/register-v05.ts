@@ -14,6 +14,11 @@ import {
   errorResult,
   bindExecutor,
   recordAudit,
+  listWorkerChild,
+  getWorkerChildById,
+  listWorkerAssignments,
+  listOfficialAtom,
+  patchWorkerAssignment,
 } from './helpers.js';
 import {
   loadProfileStore,
@@ -37,6 +42,7 @@ import {
   clearRedactionEvents,
 } from '../../platform/redactionAudit.js';
 import { entriesToAtomXml, feedIdForCollection } from '../../platform/atomCdc.js';
+import { ATOM_FEEDS } from '../../policy/atom.js';
 import { adfEquals } from '../../policy/adf.js';
 
 const listArgs = {
@@ -67,7 +73,6 @@ export function registerV05Tools(server: McpServer, ctx: ToolContext): void {
   registerPersonDeepRead(server, ctx);
   registerRecruitingDepth(server, ctx);
   registerTimeE2E(server, ctx);
-  registerBenefitsWrite(server, ctx);
   registerRecipes(server, ctx);
   registerRedactionAudit(server, ctx);
   registerAtomRealPod(server, ctx);
@@ -336,16 +341,15 @@ function registerPersonDeepRead(server: McpServer, ctx: ToolContext): void {
     async (args) =>
       runRead(async () => {
         if (args.legislativeDataId) {
-          return ctx.client.getJson(
-            `workerLegislativeData/${encodeURIComponent(args.legislativeDataId)}`,
-          );
+          return getWorkerChildById(ctx.client, 'legislativeInfo', args.legislativeDataId, [
+            'LegislativeDataId',
+          ]);
         }
-        const q = args.personNumber
-          ? `PersonNumber=${args.personNumber}`
-          : args.workerId
-            ? `WorkerId=${args.workerId}`
-            : undefined;
-        return ctx.client.list('workerLegislativeData', { q, limit: 25 });
+        return listWorkerChild(ctx.client, 'legislativeInfo', {
+          workerId: args.workerId,
+          q: args.personNumber ? `PersonNumber=${args.personNumber}` : undefined,
+          limit: 25,
+        });
       }, ctx, 'hcm_get_legislative_data'),
   );
 
@@ -373,7 +377,7 @@ function registerPersonDeepRead(server: McpServer, ctx: ToolContext): void {
     'hcm_get_assignment_history',
     {
       description:
-        'Assignment history for a worker (current + historical rows from workerAssignments / nested). Example: { "workerId": "1001" }',
+        'Assignment history for a worker via publicWorkers/{id}/child/assignments/{asg}/child/employmentHistory.',
       inputSchema: {
         workerId: z.string(),
         includeInactive: z.boolean().optional(),
@@ -382,33 +386,31 @@ function registerPersonDeepRead(server: McpServer, ctx: ToolContext): void {
     },
     async (args) =>
       runRead(async () => {
-        const list = await ctx.client.list('workerAssignments', {
-          q: adfEquals('WorkerId', String(args.workerId)),
-          limit: 100,
-        });
-        let items = list.items as Record<string, unknown>[];
+        const { items } = await listWorkerAssignments(ctx.client, String(args.workerId));
+        let filtered = items;
         if (!args.includeInactive) {
-          items = items.filter(
+          filtered = items.filter(
             (a) =>
               !a.AssignmentStatusType ||
               String(a.AssignmentStatusType).toUpperCase() === 'ACTIVE' ||
               String(a.AssignmentStatusType) === 'A',
           );
         }
-        // Also try history collection if present on pod
         let historyExtra: unknown = null;
         try {
-          historyExtra = await ctx.client.list('assignmentHistories', {
-            q: adfEquals('WorkerId', String(args.workerId)),
-            limit: 50,
-          });
+          const first = filtered[0] as { AssignmentId?: string } | undefined;
+          if (first?.AssignmentId) {
+            historyExtra = await ctx.client.list(
+              `publicWorkers/${encodeURIComponent(String(args.workerId))}/child/assignments/${encodeURIComponent(first.AssignmentId)}/child/employmentHistory`,
+            );
+          }
         } catch {
-          historyExtra = { note: 'assignmentHistories not available on this pod (404/403 OK)' };
+          historyExtra = { note: 'employmentHistory child not available on this pod (404/403 OK)' };
         }
         return {
           workerId: args.workerId,
-          assignments: items,
-          count: items.length,
+          assignments: filtered,
+          count: filtered.length,
           historyCollection: historyExtra,
         };
       }, ctx, 'hcm_get_assignment_history'),
@@ -440,26 +442,19 @@ function registerPersonDeepRead(server: McpServer, ctx: ToolContext): void {
         const worker = await ctx.client.getJson(`workers/${encodeURIComponent(workerId)}`, {
           expand: 'workRelationships',
         });
-        const assignments = await ctx.client.list('workerAssignments', {
-          q: adfEquals('WorkerId', workerId),
-          limit: 50,
-        });
+        const { items: assignments } = await listWorkerAssignments(ctx.client, workerId);
         let legislative = null;
         try {
-          const pn = (worker as { PersonNumber?: string }).PersonNumber ?? args.personNumber;
-          legislative = await ctx.client.list('workerLegislativeData', {
-            q: pn ? `PersonNumber=${pn}` : `WorkerId=${workerId}`,
-            limit: 10,
-          });
+          legislative = await listWorkerChild(ctx.client, 'legislativeInfo', { workerId, limit: 10 });
         } catch (e) {
           legislative = { error: e instanceof Error ? e.message : String(e) };
         }
         return {
           workerId,
           worker,
-          assignments: assignments.items,
+          assignments,
           legislative,
-          note: 'Unofficial person deep-read pack.',
+          note: 'Unofficial person deep-read pack (official nested workers children).',
         };
       }, ctx, 'hcm_person_deep_read'),
   );
@@ -490,29 +485,6 @@ function registerRecruitingDepth(server: McpServer, ctx: ToolContext): void {
       ),
   );
   server.registerTool(
-    'hcm_search_interviews',
-    {
-      description: 'Search recruiting interviews (curated).',
-      inputSchema: listArgs,
-      annotations: { readOnlyHint: true },
-    },
-    listHandler(ctx, 'recruitingInterviews', 'hcm_search_interviews'),
-  );
-  server.registerTool(
-    'hcm_get_interview',
-    {
-      description: 'Get recruiting interview by id.',
-      inputSchema: { interviewId: z.string() },
-      annotations: { readOnlyHint: true },
-    },
-    async ({ interviewId }) =>
-      runRead(
-        () => ctx.client.getJson(`recruitingInterviews/${encodeURIComponent(interviewId)}`),
-        ctx,
-        'hcm_get_interview',
-      ),
-  );
-  server.registerTool(
     'hcm_list_candidate_attachments',
     {
       description:
@@ -523,10 +495,10 @@ function registerRecruitingDepth(server: McpServer, ctx: ToolContext): void {
     async (args) =>
       runRead(
         () =>
-          ctx.client.list('recruitingCandidateAttachments', {
-            q: adfEquals('CandidateId', String(args.candidateId)),
-            limit: args.limit ?? 25,
-          }),
+          ctx.client.list(
+            `recruitingCandidates/${encodeURIComponent(String(args.candidateId))}/child/attachments`,
+            { limit: args.limit ?? 25 },
+          ),
         ctx,
         'hcm_list_candidate_attachments',
       ),
@@ -538,7 +510,7 @@ function registerTimeE2E(server: McpServer, ctx: ToolContext): void {
     'hcm_validate_time_card',
     {
       description:
-        'Validate a time card payload before submit (client + dummy/action/validate). Does not submit. Example: { "body": { "PersonNumber": "P1001", "PeriodStart": "2026-09-14", "PeriodEnd": "2026-09-20" } }',
+        'Validate a time card payload locally before submit (no invented Fusion validate action). Does not submit.',
       inputSchema: { body: z.record(z.unknown()) },
       annotations: { readOnlyHint: true },
     },
@@ -549,21 +521,11 @@ function registerTimeE2E(server: McpServer, ctx: ToolContext): void {
         if (!body.PersonNumber && !body.personNumber) issues.push('PersonNumber required');
         if (!body.PeriodStart && !body.periodStart) issues.push('PeriodStart required');
         if (!body.PeriodEnd && !body.periodEnd) issues.push('PeriodEnd required');
-        let serverValidation: unknown = null;
-        try {
-          serverValidation = await ctx.client.postJson('timeCards/action/validate', body);
-        } catch (e) {
-          serverValidation = {
-            unreachable: true,
-            error: e instanceof Error ? e.message : String(e),
-            note: 'Local schema checks still apply; pod may lack validate action.',
-          };
-        }
         return {
           valid: issues.length === 0,
           issues,
-          serverValidation,
-          next: 'Call hcm_submit_time_card (approval-gated) when valid.',
+          serverValidation: { localOnly: true, note: 'No public Fusion timeCards/action/validate — local schema only.' },
+          next: 'Call hcm_submit_time_card (POST timeRecordEventRequests, approval-gated) when valid.',
         };
       }, ctx, 'hcm_validate_time_card'),
   );
@@ -572,52 +534,16 @@ function registerTimeE2E(server: McpServer, ctx: ToolContext): void {
   server.registerTool(
     'hcm_get_time_card',
     {
-      description: 'Get time card by id.',
+      description: 'Get a time record group by id (official timeRecordGroups).',
       inputSchema: { timeCardId: z.string() },
       annotations: { readOnlyHint: true },
     },
     async ({ timeCardId }) =>
       runRead(
-        () => ctx.client.getJson(`timeCards/${encodeURIComponent(timeCardId)}`),
+        () => ctx.client.getJson(`timeRecordGroups/${encodeURIComponent(timeCardId)}`),
         ctx,
         'hcm_get_time_card',
       ),
-  );
-}
-
-function registerBenefitsWrite(server: McpServer, ctx: ToolContext): void {
-  bindExecutor(ctx, 'hcm_enroll_benefit', async (args) =>
-    ctx.client.postJson('benefitEnrollments/action/enroll', args.body ?? args),
-  );
-  server.registerTool(
-    'hcm_enroll_benefit',
-    {
-      description:
-        'Enroll person in a benefit plan (approval-gated unless --write). Example: { "body": { "PersonNumber": "P1001", "PlanName": "Dental" } }',
-      inputSchema: { body: z.record(z.unknown()) },
-      annotations: { readOnlyHint: false },
-    },
-    async (args) => gateWrite(ctx, 'hcm_enroll_benefit', args),
-  );
-
-  bindExecutor(ctx, 'hcm_opt_out_benefit', async (args) => {
-    const id = String(args.enrollmentId);
-    return ctx.client.postJson(
-      `benefitEnrollments/${encodeURIComponent(id)}/action/optOut`,
-      args.body ?? {},
-    );
-  });
-  server.registerTool(
-    'hcm_opt_out_benefit',
-    {
-      description: 'Opt out of a benefit enrollment (approval-gated). Example: { "enrollmentId": "BE1" }',
-      inputSchema: {
-        enrollmentId: z.string(),
-        body: z.record(z.unknown()).optional(),
-      },
-      annotations: { readOnlyHint: false, destructiveHint: true },
-    },
-    async (args) => gateWrite(ctx, 'hcm_opt_out_benefit', args),
   );
 }
 
@@ -768,12 +694,7 @@ function registerRecipes(server: McpServer, ctx: ToolContext): void {
         if (issues.length) {
           return jsonResult({ recipe: 'time_submit', valid: false, issues });
         }
-        let serverValidation: unknown = null;
-        try {
-          serverValidation = await ctx.client.postJson('timeCards/action/validate', body);
-        } catch (e) {
-          serverValidation = { localOnly: true, error: e instanceof Error ? e.message : String(e) };
-        }
+        const serverValidation = { localOnly: true, note: 'No public Fusion timeCards/action/validate.' };
         const submit = await gateWrite(ctx, 'hcm_submit_time_card', { body });
         const first = submit.content?.[0];
         const text =
@@ -835,7 +756,7 @@ function registerAtomRealPod(server: McpServer, ctx: ToolContext): void {
     'hcm_atom_replay',
     {
       description:
-        'Replay Atom entries from a checkpoint cursor (or since) without advancing — useful for dummy + real-pod dry runs. Example: { "collection": "workers", "limit": 20 }',
+        'Replay official Atom servlet entries from a checkpoint cursor (or since) without advancing. Example: { "collection": "empupdate", "limit": 20 }',
       inputSchema: {
         collection: z.string().optional(),
         since: z.string().optional(),
@@ -846,16 +767,11 @@ function registerAtomRealPod(server: McpServer, ctx: ToolContext): void {
     },
     async (args) =>
       runRead(async () => {
-        const collection =
-          args.collection && args.collection !== 'all' ? args.collection : undefined;
-        const feedId = feedIdForCollection(collection ?? 'all');
+        const listed = await listOfficialAtom(ctx.client, args.collection, { limit: args.limit ?? 100 });
+        const feedId = listed.feedId;
         const cp = ctx.atomCheckpoints.get(feedId);
-        const feed = await ctx.client.list('atomfeeds', {
-          q: collection ? `Collection=${collection}` : undefined,
-          limit: args.limit ?? 100,
-        });
-        const { parseAtomEntry, entriesAfterCursor } = await import('../../platform/atomCdc.js');
-        const parsed = (feed.items as Record<string, unknown>[]).map(parseAtomEntry);
+        const { entriesAfterCursor } = await import('../../platform/atomCdc.js');
+        const parsed = listed.items;
         let cursor = cp?.cursor;
         if (args.since) cursor = `${args.since}::`;
         const entries = entriesAfterCursor(parsed, cursor);
@@ -897,22 +813,23 @@ function registerAtomRealPod(server: McpServer, ctx: ToolContext): void {
 const REAL_POD_ATOM_HOOKS = {
   unofficial: true,
   dummy: {
-    base: 'http://127.0.0.1:9090/hcmRestApi/resources/{version}/atomfeeds',
+    base: 'http://127.0.0.1:9090/hcmRestApi/atomservlet/{workspace}/{collection}',
     formats: ['application/json', 'application/atom+xml'],
     tools: ['hcm_atom_poll', 'hcm_atom_consume', 'hcm_atom_replay', 'hcm_atom_get_checkpoint'],
+    officialFeeds: ATOM_FEEDS.map((f) => `${f.workspace}/${f.collection}`),
   },
   realPod: {
-    typicalPath: '{ORACLE_HCM_BASE_URL}/resources/{ORACLE_HCM_API_VERSION}/atomfeeds',
+    typicalPath: '{ORACLE_HCM_BASE_URL}/atomservlet/{workspace}/{collection}',
     auth: 'Same as MCP (basic / bearer / oauth). HCM RBAC must allow Atom feed privileges.',
     checkpoint: 'ORACLE_HCM_ATOM_CHECKPOINT_PATH — local file; not Oracle CDC product.',
     steps: [
       '1. Point ORACLE_HCM_BASE_URL at non-prod pod',
-      '2. hcm_smoke_probe — expect atomfeeds 200 (or 403 if duty missing)',
-      '3. hcm_list_atom_feeds / hcm_atom_poll',
+      '2. hcm_smoke_probe — official resources/ collections (Atom is sibling atomservlet, not a resource root)',
+      '3. hcm_list_atom_feeds / hcm_atom_poll collection=empupdate',
       '4. hcm_atom_replay to validate parsers',
       '5. hcm_atom_consume to advance checkpoint',
     ],
-    gaps: 'Not every collection is Atom-enabled on every pod; 404 is informative, not a bug in MCP.',
+    gaps: 'Only official employee/* and workstructures/* feeds exist. Invented collection names 404.',
   },
 };
 
@@ -961,7 +878,7 @@ function registerBatchAndWebhookExtras(server: McpServer, ctx: ToolContext): voi
 
 function registerLearningGoalsWrites(server: McpServer, ctx: ToolContext): void {
   bindExecutor(ctx, 'hcm_create_goal', async (args) =>
-    ctx.client.postJson('goals', args.body ?? args),
+    ctx.client.postJson('goalPlans/GP1/child/performanceGoals', args.body ?? args),
   );
   server.registerTool(
     'hcm_create_goal',
@@ -975,7 +892,7 @@ function registerLearningGoalsWrites(server: McpServer, ctx: ToolContext): void 
   );
 
   bindExecutor(ctx, 'hcm_update_goal', async (args) =>
-    ctx.client.patchJson(`goals/${encodeURIComponent(String(args.goalId))}`, args.body),
+    ctx.client.patchJson(`goalPlans/GP1/child/performanceGoals/${encodeURIComponent(String(args.goalId))}`, args.body),
   );
   server.registerTool(
     'hcm_update_goal',
@@ -988,7 +905,7 @@ function registerLearningGoalsWrites(server: McpServer, ctx: ToolContext): void 
   );
 
   bindExecutor(ctx, 'hcm_enroll_learning', async (args) =>
-    ctx.client.postJson('learningEnrollments', args.body ?? args),
+    ctx.client.postJson('learnerLearningRecords', args.body ?? args),
   );
   server.registerTool(
     'hcm_enroll_learning',
@@ -1003,7 +920,7 @@ function registerLearningGoalsWrites(server: McpServer, ctx: ToolContext): void 
 
   bindExecutor(ctx, 'hcm_update_learning_enrollment', async (args) =>
     ctx.client.patchJson(
-      `learningEnrollments/${encodeURIComponent(String(args.enrollmentId))}`,
+      `learnerLearningRecords/${encodeURIComponent(String(args.enrollmentId))}`,
       args.body,
     ),
   );
@@ -1022,7 +939,7 @@ function registerCompensationExtras(server: McpServer, ctx: ToolContext): void {
   // compensation search/get already sensitive-gated in extra; add light update
   bindExecutor(ctx, 'hcm_update_compensation', async (args) =>
     ctx.client.patchJson(
-      `compensationHistories/${encodeURIComponent(String(args.compensationId))}`,
+      `salaries/${encodeURIComponent(String(args.compensationId))}`,
       args.body,
     ),
   );
@@ -1048,23 +965,9 @@ function registerAbsenceLovExtras(server: McpServer, ctx: ToolContext): void {
     },
     async ({ absenceTypeId }) =>
       runRead(
-        () => ctx.client.getJson(`absenceTypes/${encodeURIComponent(absenceTypeId)}`),
+        () => ctx.client.getJson(`absenceTypesLOV/${encodeURIComponent(absenceTypeId)}`),
         ctx,
         'hcm_get_absence_type',
-      ),
-  );
-  server.registerTool(
-    'hcm_get_absence_plan',
-    {
-      description: 'Get absence plan LOV by id.',
-      inputSchema: { absencePlanId: z.string() },
-      annotations: { readOnlyHint: true },
-    },
-    async ({ absencePlanId }) =>
-      runRead(
-        () => ctx.client.getJson(`absencePlans/${encodeURIComponent(absencePlanId)}`),
-        ctx,
-        'hcm_get_absence_plan',
       ),
   );
   server.registerTool(

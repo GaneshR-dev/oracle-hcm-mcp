@@ -10,28 +10,30 @@ Unofficial Model Context Protocol (MCP) server for **Oracle Fusion Cloud HCM** R
 
 ## Status
 
-v0.7 — split-principal approvals (`ORACLE_HCM_APPROVAL_TOKEN` never returned by tools),
-HTTP/gRPC bearer, path canonicalization (no `..` / host escape), SENSITIVE **resource roots**
-(so `hcm_rest_get` cannot bypass payslip/bank gates), profiles cannot enable `--write`,
-Fusion `REST-Framework-Version` / `If-Match`, ADF `q=` quoting, XSS-safe Approval UI,
-setup-UI CSRF/SSRF guards, dotenv. **190+ tools**.
-Perfect ADF coverage is **not** a goal. See [docs/ROADMAP.md](docs/ROADMAP.md).
+v0.9 — remaining official Fusion worker children, timeEventRequests, work-structure LOVs,
+recruiting/benefit nested collections, documentRecords actions, dummy If-Match 412.
+v0.8 — official Fusion 11.13.18.05 collection names only (no invented roots).
+v0.7 security control-plane remains: split-principal approvals, HTTP/gRPC bearer,
+path canonicalization, SENSITIVE resource **and child** gates (`nationalIdentifiers`,
+`legislativeInfo`), Fusion `REST-Framework-Version` / `If-Match`, ADF `q=` quoting.
+Atom CDC uses `/hcmRestApi/atomservlet/{workspace}/{collection}`. **240 tools**.
+Perfect ADF coverage is **not** a goal. See [docs/ORACLE_MAPPING.md](docs/ORACLE_MAPPING.md).
 
 ### Honest coverage
 
 | Domain | Curated tools | Fusion roots |
 |--------|---------------|--------------|
-| Workers + assignments | search/get/create/update + assignments deep-read | `workers`, `workerAssignments` |
-| Absences | CRUD | `absences` |
-| Plan balances | search + get (`hcm_absence_balance`, `hcm_get_plan_balance`) | **`planBalances`** |
+| Workers + assignments | search/get/create/update + nested assignments | `workers` + `child/workRelationships/.../assignments` |
+| Absences | CRUD + `loadProjectedBalance` | `absences` |
+| Plan balances | search + get + as-of-date finder | **`planBalances`** |
 | AOR | CRUD | `areasOfResponsibility` |
 | Checklists / tasks | list/get + status update | `allocatedChecklists` / **`child/allocatedTasks`** |
 | BP notifications | list/get + performAction | **`businessProcessNotifications`** |
-| Org LOVs | orgs, locations, jobs, grades | `organizations`, `locations`, `jobs`, `grades` |
-| Time | search/get (read) | `timeRecords` |
+| Org LOVs | orgs, locationsV2, jobs, grades | `organizations`, `locationsV2`, `jobs`, `grades` |
+| Time | search/get + event submit + clock | `timeRecordGroups` / `timeRecordEventRequests` / `timeEventRequests` |
 | Talent | search/get + light update | `talentPersonProfiles` |
 | Payroll | search/get (read-only) | `payrollRelationships` |
-| Generic | allowlisted get/mutate | see allowlist; **CE / generative AI blocked** |
+| Generic | allowlisted get/mutate | official roots only; **CE / generative AI blocked** |
 
 ## Safety modes
 

@@ -7,6 +7,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { atomFeedId, resolveAtomFeed } from '../policy/atom.js';
 
 export type AtomFeedMeta = {
   feedId: string;
@@ -216,7 +217,8 @@ export function createCheckpointStoreFromEnv(): CheckpointStore {
 }
 
 export function feedIdForCollection(collection: string): string {
-  return `atom:${collection}`;
+  const f = resolveAtomFeed(collection);
+  return atomFeedId(f.workspace, f.collection);
 }
 
 export function hashBody(body: string): string {

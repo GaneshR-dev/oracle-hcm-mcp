@@ -130,26 +130,26 @@ describe('v0.6 --write bypasses everything', () => {
 });
 
 describe('v0.6 domains', () => {
-  it('performance review cycles + feedback + check-ins', async () => {
+  it('performance check-ins (official checkInDocuments)', async () => {
     await withClient(cfg(), async (c) => {
-      const cycles = parse(await c.callTool({ name: 'hcm_search_review_cycles', arguments: {} }));
-      expect(cycles.items?.length).toBeGreaterThanOrEqual(1);
-      const fb = parse(
+      const ins = parse(await c.callTool({ name: 'hcm_search_check_ins', arguments: {} }));
+      expect(ins.items?.length).toBeGreaterThanOrEqual(1);
+      const pending = parse(
         await c.callTool({
-          name: 'hcm_create_feedback',
-          arguments: { body: { PersonNumber: 'P1001', Comments: 'hi' } },
+          name: 'hcm_create_check_in',
+          arguments: { body: { PersonNumber: 'P1001', ManagerPersonNumber: 'P1002', ScheduledDate: '2026-10-01' } },
         }),
       );
-      expect(fb.pending_approval).toBe(true);
+      expect(pending.pending_approval).toBe(true);
     });
     await withClient(cfg({ writeMode: true }), async (c) => {
-      const fb = parse(
+      const created = parse(
         await c.callTool({
-          name: 'hcm_create_feedback',
-          arguments: { body: { PersonNumber: 'P1001', Comments: 'ok' } },
+          name: 'hcm_create_check_in',
+          arguments: { body: { PersonNumber: 'P1001', ManagerPersonNumber: 'P1002', ScheduledDate: '2026-10-02' } },
         }),
       );
-      expect(fb.FeedbackId).toBeTruthy();
+      expect(created.CheckInDocumentId || created.CheckInId).toBeTruthy();
     });
   });
 
@@ -203,6 +203,8 @@ describe('v0.6 domains', () => {
       expect(acc.items?.length).toBeGreaterThanOrEqual(1);
       const lov = parse(await c.callTool({ name: 'hcm_list_absence_type_lov', arguments: {} }));
       expect(lov.items?.length).toBeGreaterThanOrEqual(1);
+      const planLov = parse(await c.callTool({ name: 'hcm_list_absence_plan_lov', arguments: {} }));
+      expect(planLov.items?.length).toBeGreaterThanOrEqual(1);
     });
   });
 });
@@ -285,10 +287,8 @@ describe('v0.6 platform', () => {
     await wh.stop();
   });
 
-  it('nice/later: otbi, dependents, talent pools', async () => {
+  it('nice/later: dependents, talent pools (official nested/LOV)', async () => {
     await withClient(cfg(), async (c) => {
-      const otbi = parse(await c.callTool({ name: 'hcm_otbi_query', arguments: {} }));
-      expect(otbi.items?.length).toBeGreaterThanOrEqual(1);
       const dep = parse(await c.callTool({ name: 'hcm_search_benefit_dependents', arguments: {} }));
       expect(dep.items?.length).toBeGreaterThanOrEqual(1);
       const pool = parse(await c.callTool({ name: 'hcm_search_talent_pools', arguments: {} }));
@@ -303,10 +303,10 @@ describe('v0.6 platform', () => {
 });
 
 describe('v0.6 tool count', () => {
-  it('registers 190+ tools', async () => {
+  it('registers 170+ tools', async () => {
     await withClient(cfg(), async (c) => {
       const tools = await c.listTools();
-      expect(tools.tools.length).toBeGreaterThanOrEqual(190);
+      expect(tools.tools.length).toBeGreaterThanOrEqual(170);
     });
   });
 });

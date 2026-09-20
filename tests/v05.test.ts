@@ -117,12 +117,10 @@ describe('v0.5 person deep-read + recruiting', () => {
     });
   });
 
-  it('offers interviews attachments', async () => {
+  it('offers and candidate attachments (official nested child)', async () => {
     await withClient(cfg(), async (c) => {
       const offers = parse(await c.callTool({ name: 'hcm_search_offers', arguments: { limit: 5 } }));
       expect(offers.items?.length).toBeGreaterThanOrEqual(1);
-      const ints = parse(await c.callTool({ name: 'hcm_search_interviews', arguments: {} }));
-      expect(ints.items?.length).toBeGreaterThanOrEqual(1);
       const att = parse(
         await c.callTool({ name: 'hcm_list_candidate_attachments', arguments: { candidateId: 'CAN1' } }),
       );
@@ -142,15 +140,15 @@ describe('v0.5 time + benefits + recipes', () => {
     });
   });
 
-  it('benefits enroll is approval-gated', async () => {
+  it('benefits enrollments are searchable (no invented enroll action)', async () => {
     await withClient(cfg(), async (c) => {
       const r = parse(
         await c.callTool({
-          name: 'hcm_enroll_benefit',
-          arguments: { body: { PersonNumber: 'P1001', PlanName: 'Dental' } },
+          name: 'hcm_search_benefit_enrollments',
+          arguments: { limit: 5 },
         }),
       );
-      expect(r.pending_approval).toBe(true);
+      expect(r.items?.length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -236,7 +234,7 @@ describe('v0.5 learning/goals writes + compensation + absence LOVs', () => {
     });
   });
 
-  it('absence type/plan get + balance_by_plan', async () => {
+  it('absence type LOV get + balance_by_plan', async () => {
     await withClient(cfg(), async (c) => {
       const t = parse(await c.callTool({ name: 'hcm_get_absence_type', arguments: { absenceTypeId: 'AT1' } }));
       expect(t.AbsenceTypeId).toBe('AT1');
@@ -305,7 +303,7 @@ describe('v0.5 redaction audit + bulk preview + webhook rotate', () => {
 
   it('atom replay', async () => {
     await withClient(cfg(), async (c) => {
-      const r = parse(await c.callTool({ name: 'hcm_atom_replay', arguments: { collection: 'workers', limit: 10 } }));
+      const r = parse(await c.callTool({ name: 'hcm_atom_replay', arguments: { collection: 'empupdate', limit: 10 } }));
       expect(r.mode).toBe('replay');
       expect(r.realPodHooks).toBeTruthy();
     });

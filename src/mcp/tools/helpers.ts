@@ -7,8 +7,230 @@ import { isSensitiveTool } from '../../policy/sensitive.js';
 import type { Config } from '../../config.js';
 import { redactDeep } from '../../platform/redact.js';
 import type { WebhookReceiver } from '../../platform/webhookStub.js';
-import type { CheckpointStore } from '../../platform/atomCdc.js';
+import type { CheckpointStore, ParsedAtomEntry } from '../../platform/atomCdc.js';
 import { safeEqual } from '../../policy/cryptoSafe.js';
+import { resolveAtomFeed } from '../../policy/atom.js';
+
+/** Flatten workers/{id}?expand=workRelationships.assignments into assignment rows. */
+export async function listWorkerAssignments(
+  client: HcmClient,
+  workerId: string,
+): Promise<{
+  worker: Record<string, unknown>;
+  items: Record<string, unknown>[];
+}> {
+  const worker = (await client.getJson(`workers/${encodeURIComponent(workerId)}`, {
+    expand: 'workRelationships.assignments',
+  })) as Record<string, unknown>;
+  const items: Record<string, unknown>[] = [];
+  const wrs = (worker.workRelationships as
+    | { PeriodOfServiceId?: string; assignments?: Record<string, unknown>[] }[]
+    | undefined) ?? [];
+  for (const wr of wrs) {
+    for (const a of wr.assignments ?? []) {
+      items.push({ ...a, PeriodOfServiceId: wr.PeriodOfServiceId, WorkerId: workerId });
+    }
+  }
+  return { worker, items };
+}
+
+/** PATCH nested Fusion assignment: workers/{id}/child/workRelationships/{wr}/child/assignments/{asg}. */
+export async function patchWorkerAssignment(
+  client: HcmClient,
+  workerId: string,
+  assignmentId: string,
+  body: unknown,
+  periodOfServiceId?: string,
+): Promise<unknown> {
+  let wrId = periodOfServiceId;
+  if (!wrId) {
+    const { items } = await listWorkerAssignments(client, workerId);
+    wrId = items.find((a) => String(a.AssignmentId) === assignmentId)?.PeriodOfServiceId as
+      | string
+      | undefined;
+  }
+  if (!wrId) {
+    throw new Error(`Assignment ${assignmentId} not found under workers/${workerId} workRelationships`);
+  }
+  return client.patchJson(
+    `workers/${encodeURIComponent(workerId)}/child/workRelationships/${encodeURIComponent(wrId)}/child/assignments/${encodeURIComponent(assignmentId)}`,
+    body,
+  );
+}
+
+/** Resolve assignmentId → worker + nested PATCH using official workers child path. */
+export async function patchAssignmentById(
+  client: HcmClient,
+  assignmentId: string,
+  body: unknown,
+  workerId?: string,
+  periodOfServiceId?: string,
+): Promise<unknown> {
+  let wid = workerId;
+  if (!wid) {
+    const workers = await client.list('workers', { limit: 100 });
+    for (const w of workers.items as { WorkerId?: string }[]) {
+      const id = String(w.WorkerId ?? '');
+      if (!id) continue;
+      const { items } = await listWorkerAssignments(client, id);
+      if (items.some((a) => String(a.AssignmentId) === assignmentId)) {
+        wid = id;
+        break;
+      }
+    }
+  }
+  if (!wid) throw new Error(`Assignment ${assignmentId} not found under workers`);
+  return patchWorkerAssignment(client, wid, assignmentId, body, periodOfServiceId);
+}
+
+export type WorkerChildName =
+  | 'emails'
+  | 'phones'
+  | 'nationalIdentifiers'
+  | 'legislativeInfo'
+  | 'addresses'
+  | 'names'
+  | 'photos'
+  | 'citizenships'
+  | 'visasPermits'
+  | 'passports'
+  | 'disabilities'
+  | 'driverLicenses'
+  | 'ethnicities'
+  | 'religions'
+  | 'externalIdentifiers'
+  | 'otherCommunicationAccounts'
+  | 'messages';
+
+/** GET workers/{id}/child/{child} across one or all workers (official nested collections). */
+export async function listWorkerChild(
+  client: HcmClient,
+  child: WorkerChildName,
+  opts: { workerId?: string; q?: string; limit?: number; offset?: number } = {},
+): Promise<{ items: Record<string, unknown>[]; count: number; hasMore: boolean }> {
+  const workerIds: { WorkerId: string; PersonNumber?: string }[] = [];
+  if (opts.workerId) {
+    workerIds.push({ WorkerId: opts.workerId });
+  } else {
+    const list = await client.list('workers', { limit: opts.limit ?? 100, offset: opts.offset ?? 0 });
+    for (const w of list.items as { WorkerId?: string; PersonNumber?: string }[]) {
+      if (w.WorkerId) workerIds.push({ WorkerId: String(w.WorkerId), PersonNumber: w.PersonNumber });
+    }
+  }
+  const items: Record<string, unknown>[] = [];
+  for (const w of workerIds) {
+    try {
+      const nested = await client.list(
+        `workers/${encodeURIComponent(w.WorkerId)}/child/${child}`,
+        { limit: 100 },
+      );
+      for (const row of nested.items as Record<string, unknown>[]) {
+        items.push({ ...row, WorkerId: w.WorkerId, PersonNumber: w.PersonNumber ?? row.PersonNumber });
+      }
+    } catch {
+      /* pod may 404 a child — skip */
+    }
+  }
+  let filtered = items;
+  if (opts.q) {
+    const lower = opts.q.toLowerCase();
+    filtered = items.filter((it) => JSON.stringify(it).toLowerCase().includes(lower));
+  }
+  const limit = opts.limit ?? 25;
+  const offset = opts.offset ?? 0;
+  const slice = filtered.slice(offset, offset + limit);
+  return { items: slice, count: filtered.length, hasMore: offset + slice.length < filtered.length };
+}
+
+export async function getWorkerChildById(
+  client: HcmClient,
+  child: WorkerChildName,
+  id: string,
+  idFields: string[],
+): Promise<Record<string, unknown>> {
+  const { items } = await listWorkerChild(client, child, { limit: 200 });
+  const found = items.find((it) => idFields.some((f) => String(it[f] ?? '') === id));
+  if (!found) throw new Error(`${child} id ${id} not found under workers/*/child/${child}`);
+  return found;
+}
+
+export async function postWorkerChild(
+  client: HcmClient,
+  workerId: string,
+  child: WorkerChildName,
+  body: unknown,
+): Promise<unknown> {
+  return client.postJson(`workers/${encodeURIComponent(workerId)}/child/${child}`, body);
+}
+
+export async function patchWorkerChild(
+  client: HcmClient,
+  workerId: string,
+  child: WorkerChildName,
+  childId: string,
+  body: unknown,
+): Promise<unknown> {
+  return client.patchJson(
+    `workers/${encodeURIComponent(workerId)}/child/${child}/${encodeURIComponent(childId)}`,
+    body,
+  );
+}
+
+export async function listNestedChild(
+  client: HcmClient,
+  parentRoot: string,
+  child: string,
+  idField: string,
+  opts: { parentId?: string; q?: string; limit?: number; offset?: number } = {},
+): Promise<{ items: Record<string, unknown>[]; count: number; hasMore: boolean }> {
+  const ids: string[] = [];
+  if (opts.parentId) {
+    ids.push(opts.parentId);
+  } else {
+    const list = await client.list(parentRoot, { limit: opts.limit ?? 50, offset: opts.offset ?? 0 });
+    for (const row of list.items as Record<string, unknown>[]) {
+      const id = row[idField];
+      if (id != null) ids.push(String(id));
+    }
+  }
+  const items: Record<string, unknown>[] = [];
+  for (const id of ids) {
+    try {
+      const nested = await client.list(`${parentRoot}/${encodeURIComponent(id)}/child/${child}`);
+      for (const row of nested.items as Record<string, unknown>[]) {
+        items.push({ ...row, [idField]: id });
+      }
+    } catch {
+      /* skip */
+    }
+  }
+  let filtered = items;
+  if (opts.q) {
+    const lower = opts.q.toLowerCase();
+    filtered = items.filter((it) => JSON.stringify(it).toLowerCase().includes(lower));
+  }
+  const limit = opts.limit ?? 25;
+  const offset = opts.offset ?? 0;
+  const slice = filtered.slice(offset, offset + limit);
+  return { items: slice, count: filtered.length, hasMore: offset + slice.length < filtered.length };
+}
+
+/** Official Atom servlet list. `collection` is workspace/collection, collection name, or "all". */
+export async function listOfficialAtom(
+  client: HcmClient,
+  collection?: string,
+  query?: Record<string, string | number | undefined>,
+): Promise<{ feedId: string; workspace: string; collection: string; items: ParsedAtomEntry[]; count: number }> {
+  const feed = resolveAtomFeed(collection);
+  const list = await client.listAtom(feed.workspace, feed.collection, query);
+  return {
+    feedId: `atom:${feed.workspace}/${feed.collection}`,
+    workspace: feed.workspace,
+    collection: feed.collection,
+    items: list.items,
+    count: list.count ?? list.items.length,
+  };
+}
 
 export type WriteExecutor = (args: Record<string, unknown>) => Promise<unknown>;
 

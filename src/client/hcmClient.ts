@@ -6,11 +6,13 @@
  */
 
 import type { Config } from '../config.js';
-import { resourcesBase } from '../config.js';
+import { resourcesBase, atomservletBase } from '../config.js';
 import { assertAllowlisted, canonicalizeResourcePath } from '../policy/allowlist.js';
-import { isSensitiveRoot, sensitiveRootDeniedMessage } from '../policy/sensitive.js';
+import { isSensitivePath, sensitiveRootDeniedMessage } from '../policy/sensitive.js';
 import { RateLimiter, withBackoff } from '../platform/rateLimit.js';
 import { agentForUrl } from '../platform/connectionPool.js';
+import { assertAtomTokens } from '../policy/atom.js';
+import { parseAtomEntry, parseAtomXml, type ParsedAtomEntry } from '../platform/atomCdc.js';
 
 export class HcmHttpError extends Error {
   constructor(
@@ -56,10 +58,16 @@ export class HcmClient {
     this.cachedToken = undefined;
   }
 
-  private assertSensitiveRoot(root: string): void {
-    if (!isSensitiveRoot(root)) return;
+  private assertSensitivePath(path: string): void {
+    if (!isSensitivePath(path)) return;
     if (this.cfg.writeMode || this.cfg.sensitiveEnabled) return;
-    throw new Error(sensitiveRootDeniedMessage(root));
+    let label = path;
+    try {
+      label = canonicalizeResourcePath(path).root;
+    } catch {
+      /* use raw */
+    }
+    throw new Error(sensitiveRootDeniedMessage(label));
   }
 
   /**
@@ -67,7 +75,7 @@ export class HcmClient {
    */
   resourcesUrl(path: string, opts: { skipSensitive?: boolean } = {}): string {
     const canon = assertAllowlisted(path);
-    if (!opts.skipSensitive) this.assertSensitiveRoot(canon.root);
+    if (!opts.skipSensitive) this.assertSensitivePath(path);
     const base = resourcesBase(this.cfg);
     let href = `${base}/${canon.resourcePath}`;
     if (canon.query) href += `?${canon.query}`;
@@ -167,7 +175,7 @@ export class HcmClient {
     const text = await res.text().catch(() => '');
     let sensitive = false;
     try {
-      sensitive = isSensitiveRoot(canonicalizeResourcePath(path).root);
+      sensitive = isSensitivePath(path);
     } catch {
       /* ignore */
     }
@@ -297,6 +305,82 @@ export class HcmClient {
     return this.parseJson(res);
   }
 
+  /**
+   * Fusion Atom servlet URL: `{baseUrl}/atomservlet/{workspace}/{collection}[/{entryId}]`.
+   * Not under resources/{version}/.
+   */
+  atomUrl(workspace: string, collection: string, entryId?: string): string {
+    assertAtomTokens(workspace, collection, entryId);
+    const base = atomservletBase(this.cfg);
+    let href = `${base}/${encodeURIComponent(workspace)}/${encodeURIComponent(collection)}`;
+    if (entryId) href += `/${encodeURIComponent(entryId)}`;
+    const parsed = new URL(href);
+    const baseParsed = new URL(base.endsWith('/') ? base : `${base}/`);
+    if (parsed.protocol !== baseParsed.protocol || parsed.host !== baseParsed.host) {
+      throw new Error('Refusing to call a host other than the configured HCM base URL');
+    }
+    const prefix = baseParsed.pathname.replace(/\/+$/, '');
+    if (parsed.pathname !== prefix && !parsed.pathname.startsWith(`${prefix}/`)) {
+      throw new Error('Refusing to escape the configured Atom servlet path');
+    }
+    return parsed.toString();
+  }
+
+  async listAtom(
+    workspace: string,
+    collection: string,
+    query?: Record<string, string | number | undefined>,
+  ): Promise<ListResult<ParsedAtomEntry>> {
+    const url = new URL(this.atomUrl(workspace, collection));
+    if (query) {
+      for (const [k, v] of Object.entries(query)) {
+        if (v !== undefined && v !== '') url.searchParams.set(k, String(v));
+      }
+    }
+    const res = await this.rawFetch(url.toString(), {
+      method: 'GET',
+      headers: { Accept: 'application/atom+xml, application/json' },
+    });
+    if (!res.ok) await this.throwHttp(res);
+    const text = await res.text();
+    const ctype = res.headers.get('content-type') ?? '';
+    if (ctype.includes('json') || text.trim().startsWith('{') || text.trim().startsWith('[')) {
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(text) as Record<string, unknown>;
+      } catch {
+        data = {};
+      }
+      const rawItems = Array.isArray(data)
+        ? data
+        : ((data.items as unknown[]) ?? []);
+      const items = rawItems.map((x) => parseAtomEntry((x ?? {}) as Record<string, unknown>));
+      return { items, count: items.length, hasMore: false };
+    }
+    const items = parseAtomXml(text);
+    return { items, count: items.length, hasMore: false };
+  }
+
+  async getAtomEntry(
+    workspace: string,
+    collection: string,
+    entryId: string,
+  ): Promise<ParsedAtomEntry> {
+    const res = await this.rawFetch(this.atomUrl(workspace, collection, entryId), {
+      method: 'GET',
+      headers: { Accept: 'application/atom+xml, application/json' },
+    });
+    if (!res.ok) await this.throwHttp(res);
+    const text = await res.text();
+    const ctype = res.headers.get('content-type') ?? '';
+    if (ctype.includes('json') || text.trim().startsWith('{')) {
+      return parseAtomEntry(JSON.parse(text) as Record<string, unknown>);
+    }
+    const items = parseAtomXml(text);
+    if (items.length === 0) throw new Error(`Atom entry not found: ${entryId}`);
+    return items[0]!;
+  }
+
   private mutateHeaders(): Record<string, string> {
     const type = this.cfg.adfContentType
       ? 'application/vnd.oracle.adf.resourceitem+json'
@@ -309,7 +393,7 @@ export class HcmClient {
     return withBackoff(
       async () => {
         const headers = new Headers(init.headers);
-        headers.set('Accept', 'application/json');
+        if (!headers.has('Accept')) headers.set('Accept', 'application/json');
         headers.set('REST-Framework-Version', this.cfg.restFrameworkVersion ?? '4');
         const auth = await this.authorizationHeader();
         if (auth) headers.set('Authorization', auth);

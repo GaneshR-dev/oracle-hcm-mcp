@@ -1,4 +1,4 @@
-/** Seed data for dummy HCM REST mock */
+/** Seed data for dummy HCM REST mock — official Fusion 11.13.18.05 shapes only. */
 
 export type Worker = {
   WorkerId: string;
@@ -6,7 +6,23 @@ export type Worker = {
   DisplayName: string;
   FirstName: string;
   LastName: string;
-  emails?: { EmailAddress: string }[];
+  emails: EmailRow[];
+  phones: Phone[];
+  nationalIdentifiers: NationalId[];
+  legislativeInfo: LegislativeData[];
+  addresses: Address[];
+  names: PersonName[];
+  photos: Photo[];
+  citizenships: Citizenship[];
+  visasPermits: VisaPermit[];
+  passports: Passport[];
+  disabilities: Disability[];
+  driverLicenses: DriverLicense[];
+  ethnicities: Ethnicity[];
+  religions: Religion[];
+  externalIdentifiers: ExternalIdentifier[];
+  otherCommunicationAccounts: OtherComm[];
+  messages: WorkerMessage[];
   workRelationships?: WorkRelationship[];
   ManagerPersonNumber?: string;
 };
@@ -26,6 +42,8 @@ export type Assignment = {
   OrganizationId?: string;
   GradeId?: string;
   AssignmentStatusType?: string;
+  employmentHistory?: AssignmentHistory[];
+  gradeSteps?: AsgGradeStep[];
 };
 
 export type Absence = {
@@ -40,10 +58,13 @@ export type Absence = {
 export type PlanBalance = {
   BalanceId: string;
   personNumber: string;
+  PersonNumber?: string;
   absenceType: string;
   planName: string;
   balance: number;
   unit: string;
+  asOfDate?: string;
+  accruedToDate?: number;
 };
 
 export type Aor = {
@@ -110,11 +131,29 @@ export type Grade = {
 
 export type TimeRecord = {
   timeRecordId: string;
+  TimeRecordId?: string;
   personNumber: string;
   startTime: string;
   stopTime: string;
   quantity?: number;
   unit?: string;
+};
+
+export type TimeRecordGroup = {
+  TimeRecordGroupId: string;
+  personNumber: string;
+  Status?: string;
+  PeriodStart?: string;
+  PeriodEnd?: string;
+  timeRecords: TimeRecord[];
+};
+
+export type TimeRecordEventRequest = {
+  TimeRecordEventRequestId: string;
+  PersonNumber: string;
+  Status: string;
+  PeriodStart?: string;
+  PeriodEnd?: string;
 };
 
 export type TalentProfile = {
@@ -124,27 +163,137 @@ export type TalentProfile = {
   Summary?: string;
 };
 
-
-export type Requisition = { RequisitionId: string; RequisitionNumber: string; Title: string; Status: string };
-export type Candidate = { CandidateId: string; DisplayName: string; Email?: string; Status: string };
-export type JobOffer = { OfferId: string; CandidateId: string; RequisitionId: string; Status: string; ProposedSalary?: number; Currency?: string };
-export type Interview = { InterviewId: string; CandidateId: string; RequisitionId: string; ScheduledStart: string; Status: string; InterviewType?: string };
+export type Requisition = {
+  RequisitionId: string;
+  RequisitionNumber: string;
+  Title: string;
+  Status: string;
+  skills?: { SkillId: string; Name: string; Importance?: number }[];
+  attachments?: { AttachmentId: string; FileName: string; ContentType: string }[];
+  publishedJobs?: { PublishedJobId: string; Site?: string; Status?: string }[];
+};
 export type CandidateAttachment = { AttachmentId: string; CandidateId: string; FileName: string; ContentType: string; UploadedAt: string };
+export type Candidate = {
+  CandidateId: string;
+  DisplayName: string;
+  Email?: string;
+  Status: string;
+  attachments?: CandidateAttachment[];
+  citizenships?: Citizenship[];
+};
+export type JobOffer = { OfferId: string; CandidateId: string; RequisitionId: string; Status: string; ProposedSalary?: number; Currency?: string };
 export type LegislativeData = { LegislativeDataId: string; PersonNumber: string; WorkerId?: string; LegislationCode: string; MaritalStatus?: string; Sex?: string };
 export type AssignmentHistory = { HistoryId: string; WorkerId: string; AssignmentId: string; EffectiveStartDate: string; EffectiveEndDate?: string; ActionCode?: string; JobId?: string };
-export type BenefitEnrollment = { EnrollmentId: string; PersonNumber: string; PlanName: string; Status: string };
+export type BenefitDependent = { DependentId: string; PersonNumber: string; DependentName: string; Relationship: string; BirthDate?: string };
+export type BenefitEnrollment = {
+  EnrollmentId: string;
+  PersonNumber: string;
+  PlanName: string;
+  Status: string;
+  dependents?: BenefitDependent[];
+  costs?: { CostId: string; Amount: number; Currency?: string }[];
+  providers?: { ProviderId: string; ProviderName: string }[];
+};
 export type Position = { PositionId: string; PositionCode: string; Name: string; Status: string; OrganizationId?: string };
 export type Contact = { ContactId: string; PersonNumber: string; ContactName: string; Relationship: string };
 export type Phone = { PhoneId: string; PersonNumber: string; PhoneNumber: string; PhoneType: string };
 export type EmailRow = { EmailId: string; PersonNumber: string; EmailAddress: string; EmailType: string };
 export type NationalId = { NationalIdentifierId: string; PersonNumber: string; NationalIdentifierNumber: string; LegislationCode: string };
+export type Address = {
+  AddressId: string;
+  PersonNumber: string;
+  AddressLine1: string;
+  TownOrCity?: string;
+  Country?: string;
+  AddressType?: string;
+};
+export type PersonName = {
+  NameId: string;
+  PersonNumber: string;
+  FirstName: string;
+  LastName: string;
+  NameType?: string;
+};
+export type Photo = {
+  PhotoId: string;
+  PersonNumber: string;
+  PhotoName: string;
+  PhotoType?: string;
+  PrimaryFlag?: boolean;
+};
+export type Citizenship = {
+  CitizenshipId: string;
+  PersonNumber?: string;
+  CandidateId?: string;
+  CitizenshipLegislationCode: string;
+  CitizenshipStatus?: string;
+};
+export type VisaPermit = {
+  VisaPermitId: string;
+  PersonNumber: string;
+  VisaPermitType: string;
+  IssuingCountry?: string;
+  ExpirationDate?: string;
+};
+export type Passport = {
+  PassportId: string;
+  PersonNumber: string;
+  PassportNumber: string;
+  IssuingCountry?: string;
+  ExpirationDate?: string;
+};
+export type Disability = { DisabilityId: string; PersonNumber: string; Category?: string; Status?: string };
+export type DriverLicense = {
+  DriverLicenseId: string;
+  PersonNumber: string;
+  LicenseNumber: string;
+  IssuingCountry?: string;
+};
+export type Ethnicity = { EthnicityId: string; PersonNumber: string; Ethnicity?: string; LegislationCode?: string };
+export type Religion = { ReligionId: string; PersonNumber: string; Religion?: string };
+export type ExternalIdentifier = {
+  ExternalIdentifierId: string;
+  PersonNumber: string;
+  IdentifierType: string;
+  IdentifierNumber: string;
+};
+export type OtherComm = {
+  OtherCommunicationAccountId: string;
+  PersonNumber: string;
+  AccountName: string;
+  Provider?: string;
+};
+export type WorkerMessage = { MessageId: string; PersonNumber: string; MessageText: string };
+export type AsgGradeStep = { GradeStepId: string; GradeStepName: string; GradeId?: string };
+export type TimeEventRequest = {
+  timeEventRequestId: string;
+  TimeEventRequestId?: string;
+  requestNumber?: string;
+  sourceId?: string;
+  Status?: string;
+  timeEvents?: Record<string, unknown>[];
+};
 export type AbsenceType = { AbsenceTypeId: string; Name: string; Status: string };
-export type AbsencePlan = { AbsencePlanId: string; PlanName: string; Status: string };
-export type TimeCard = { TimeCardId: string; PersonNumber: string; Status: string; PeriodStart: string; PeriodEnd: string };
-export type WorkSchedule = { ScheduleId: string; ScheduleName: string; PersonNumber?: string };
 export type Goal = { GoalId: string; PersonNumber: string; GoalName: string; Status: string };
-export type PerfDoc = { DocumentId: string; PersonNumber: string; DocumentName: string; Status: string };
-export type LearningEnrollment = { EnrollmentId: string; PersonNumber: string; CourseName: string; Status: string };
+export type GoalPlan = {
+  GoalPlanId: string;
+  PersonNumber: string;
+  PlanName: string;
+  Status: string;
+  performanceGoals: Goal[];
+};
+export type PerfEval = { EvaluationId: string; DocumentId?: string; PersonNumber: string; DocumentName: string; Status: string };
+export type LearningCompletion = { CompletionId: string; PersonNumber: string; CourseName: string; CompletionDate: string; Score?: number };
+export type LearningRecord = {
+  LearningRecordId: string;
+  PersonNumber: string;
+  CourseName: string;
+  Status: string;
+  DueDate?: string;
+  AssignmentId?: string;
+  EnrollmentId?: string;
+  completionDetails?: LearningCompletion[];
+};
 export type PayslipEarningsLine = {
   ElementName: string;
   Amount: number;
@@ -177,21 +326,7 @@ export type Payslip = {
   earnings?: PayslipEarningsLine[];
   deductions?: PayslipDeductionLine[];
   employerContributions?: { ElementName: string; Amount: number }[];
-  /** Fusion-style links placeholder */
   links?: { rel: string; href: string }[];
-};
-export type BankAccount = {
-  BankAccountId: string;
-  PersonNumber: string;
-  BankAccountNumber: string;
-  BankName: string;
-  BankIdentifierCode?: string;
-  BranchName?: string;
-  AccountType?: string;
-  CurrencyCode?: string;
-  CountryCode?: string;
-  IBAN?: string;
-  SecondaryAccountNumber?: string;
 };
 export type PaymentMethod = {
   PaymentMethodId: string;
@@ -203,8 +338,9 @@ export type PaymentMethod = {
   BankAccountId?: string;
   CurrencyCode?: string;
 };
-export type Compensation = {
-  CompensationId: string;
+export type Salary = {
+  SalaryId: string;
+  CompensationId?: string;
   PersonNumber: string;
   Amount: number;
   Currency: string;
@@ -223,8 +359,9 @@ export type ElementEntry = {
   EffectiveEndDate?: string;
   InputValue?: string;
 };
-export type CalculationCard = {
-  CalculationCardId: string;
+export type CalculationEntry = {
+  CalculationEntryId: string;
+  CalculationCardId?: string;
   PersonNumber: string;
   CardType: string;
   Status: string;
@@ -234,6 +371,7 @@ export type CalculationCard = {
 export type AtomEntry = {
   EntryId: string;
   Collection: string;
+  Workspace?: string;
   Updated: string;
   Title: string;
   ChangeType: string;
@@ -245,19 +383,28 @@ export type AtomEntry = {
   links?: { rel: string; href: string }[];
 };
 
-
-export type ReviewCycle = { ReviewCycleId: string; CycleName: string; Status: string; StartDate: string; EndDate: string };
-export type Feedback = { FeedbackId: string; PersonNumber: string; FromPersonNumber: string; Comments: string; Status: string };
-export type CheckIn = { CheckInId: string; PersonNumber: string; ManagerPersonNumber: string; ScheduledDate: string; Status: string; Notes?: string };
-export type LearningAssignment = { AssignmentId: string; PersonNumber: string; CourseName: string; DueDate: string; Status: string };
-export type LearningCompletion = { CompletionId: string; PersonNumber: string; CourseName: string; CompletionDate: string; Score?: number };
+export type CheckInDocument = {
+  CheckInDocumentId: string;
+  CheckInId?: string;
+  PersonNumber: string;
+  ManagerPersonNumber: string;
+  ScheduledDate: string;
+  Status: string;
+  Notes?: string;
+};
 export type SalaryBasis = { SalaryBasisId: string; Name: string; Frequency: string; Currency: string; Status: string };
 export type GradeStep = { GradeStepId: string; GradeId: string; StepName: string; Sequence: number; Amount: number };
 export type JobFamily = { JobFamilyId: string; JobFamilyCode: string; JobFamilyName: string; Status: string };
 export type DocumentRecord = { DocumentRecordId: string; PersonNumber: string; DocumentType: string; FileName: string; UploadedAt: string; Status: string };
-export type WorkerJourney = { JourneyId: string; PersonNumber: string; JourneyName: string; Status: string; JourneyType: string };
 export type JourneyTask = { JourneyTaskId: string; JourneyId: string; TaskName: string; Status: string; DueDate?: string };
-export type BenefitDependent = { DependentId: string; PersonNumber: string; DependentName: string; Relationship: string; BirthDate?: string };
+export type WorkerJourney = {
+  JourneyId: string;
+  PersonNumber: string;
+  JourneyName: string;
+  Status: string;
+  JourneyType: string;
+  tasks?: JourneyTask[];
+};
 export type LifeEvent = { LifeEventId: string; PersonNumber: string; EventType: string; EventDate: string; Status: string };
 export type TalentPool = { TalentPoolId: string; PoolName: string; Status: string; MemberCount: number };
 export type PayrollCosting = { CostingId: string; PersonNumber: string; CostCenter: string; Percentage: number; ElementName?: string };
@@ -270,6 +417,10 @@ export type PayrollRelationship = {
 };
 
 export function seedStore() {
+  const history1001: AssignmentHistory[] = [
+    { HistoryId: 'AH1', WorkerId: '1001', AssignmentId: 'AS1', EffectiveStartDate: '2024-01-15', ActionCode: 'HIRE', JobId: 'J1' },
+    { HistoryId: 'AH2', WorkerId: '1001', AssignmentId: 'AS1', EffectiveStartDate: '2025-06-01', ActionCode: 'PROMOTION', JobId: 'J1' },
+  ];
   const assignments1001: Assignment[] = [
     {
       AssignmentId: 'AS1',
@@ -280,6 +431,8 @@ export function seedStore() {
       OrganizationId: 'O1',
       GradeId: 'G1',
       AssignmentStatusType: 'ACTIVE',
+      employmentHistory: history1001,
+      gradeSteps: [{ GradeStepId: 'AGS1', GradeStepName: 'Step 1', GradeId: 'G1' }],
     },
   ];
   const assignments1002: Assignment[] = [
@@ -292,8 +445,38 @@ export function seedStore() {
       OrganizationId: 'O1',
       GradeId: 'G2',
       AssignmentStatusType: 'ACTIVE',
+      employmentHistory: [],
+      gradeSteps: [],
     },
   ];
+
+  const phones1001: Phone[] = [
+    { PhoneId: 'PH1', PersonNumber: 'P1001', PhoneNumber: '+1-555-0100', PhoneType: 'WORK' },
+  ];
+  const emails1001: EmailRow[] = [
+    { EmailId: 'EM1', PersonNumber: 'P1001', EmailAddress: 'ada@example.com', EmailType: 'WORK' },
+  ];
+  const nids1001: NationalId[] = [
+    { NationalIdentifierId: 'NI1', PersonNumber: 'P1001', NationalIdentifierNumber: '123-45-6789', LegislationCode: 'US' },
+  ];
+  const legis1001: LegislativeData[] = [
+    { LegislativeDataId: 'LD1', PersonNumber: 'P1001', WorkerId: '1001', LegislationCode: 'US', MaritalStatus: 'M', Sex: 'F' },
+  ];
+  const emptyPersonKids = {
+    addresses: [] as Address[],
+    names: [] as PersonName[],
+    photos: [] as Photo[],
+    citizenships: [] as Citizenship[],
+    visasPermits: [] as VisaPermit[],
+    passports: [] as Passport[],
+    disabilities: [] as Disability[],
+    driverLicenses: [] as DriverLicense[],
+    ethnicities: [] as Ethnicity[],
+    religions: [] as Religion[],
+    externalIdentifiers: [] as ExternalIdentifier[],
+    otherCommunicationAccounts: [] as OtherComm[],
+    messages: [] as WorkerMessage[],
+  };
 
   const workers: Worker[] = [
     {
@@ -302,7 +485,37 @@ export function seedStore() {
       DisplayName: 'Ada Lovelace',
       FirstName: 'Ada',
       LastName: 'Lovelace',
-      emails: [{ EmailAddress: 'ada@example.com' }],
+      emails: emails1001,
+      phones: phones1001,
+      nationalIdentifiers: nids1001,
+      legislativeInfo: legis1001,
+      addresses: [
+        { AddressId: 'AD1', PersonNumber: 'P1001', AddressLine1: '1 Analytical Engine', TownOrCity: 'London', Country: 'GB', AddressType: 'HOME' },
+      ],
+      names: [{ NameId: 'NM1', PersonNumber: 'P1001', FirstName: 'Ada', LastName: 'Lovelace', NameType: 'GLOBAL' }],
+      photos: [{ PhotoId: 'PHTO1', PersonNumber: 'P1001', PhotoName: 'ada.jpg', PhotoType: 'PROFILE', PrimaryFlag: true }],
+      citizenships: [
+        { CitizenshipId: 'CZ1', PersonNumber: 'P1001', CitizenshipLegislationCode: 'GB', CitizenshipStatus: 'A' },
+      ],
+      visasPermits: [
+        { VisaPermitId: 'VS1', PersonNumber: 'P1001', VisaPermitType: 'WORK', IssuingCountry: 'US', ExpirationDate: '2027-12-31' },
+      ],
+      passports: [
+        { PassportId: 'PP1', PersonNumber: 'P1001', PassportNumber: 'P-ADA-1', IssuingCountry: 'GB', ExpirationDate: '2030-01-01' },
+      ],
+      disabilities: [{ DisabilityId: 'DI1', PersonNumber: 'P1001', Category: 'NONE', Status: 'A' }],
+      driverLicenses: [
+        { DriverLicenseId: 'DL1', PersonNumber: 'P1001', LicenseNumber: 'GB-DL-1', IssuingCountry: 'GB' },
+      ],
+      ethnicities: [{ EthnicityId: 'ET1', PersonNumber: 'P1001', Ethnicity: 'NOT_DISCLOSED', LegislationCode: 'GB' }],
+      religions: [{ ReligionId: 'RG1', PersonNumber: 'P1001', Religion: 'NOT_DISCLOSED' }],
+      externalIdentifiers: [
+        { ExternalIdentifierId: 'EX1', PersonNumber: 'P1001', IdentifierType: 'BADGE', IdentifierNumber: 'B-1001' },
+      ],
+      otherCommunicationAccounts: [
+        { OtherCommunicationAccountId: 'OC1', PersonNumber: 'P1001', AccountName: '@ada', Provider: 'X' },
+      ],
+      messages: [{ MessageId: 'WM1', PersonNumber: 'P1001', MessageText: 'Welcome' }],
       ManagerPersonNumber: undefined,
       workRelationships: [
         {
@@ -318,7 +531,11 @@ export function seedStore() {
       DisplayName: 'Alan Turing',
       FirstName: 'Alan',
       LastName: 'Turing',
-      emails: [{ EmailAddress: 'alan@example.com' }],
+      emails: [{ EmailId: 'EM2', PersonNumber: 'P1002', EmailAddress: 'alan@example.com', EmailType: 'WORK' }],
+      phones: [{ PhoneId: 'PH2', PersonNumber: 'P1002', PhoneNumber: '+1-555-0101', PhoneType: 'WORK' }],
+      nationalIdentifiers: [],
+      legislativeInfo: [],
+      ...emptyPersonKids,
       ManagerPersonNumber: 'P1001',
       workRelationships: [
         {
@@ -329,8 +546,6 @@ export function seedStore() {
       ],
     },
   ];
-
-  const workerAssignments: Assignment[] = [...assignments1001, ...assignments1002];
 
   const absences: Absence[] = [
     {
@@ -347,6 +562,7 @@ export function seedStore() {
     {
       BalanceId: 'B1',
       personNumber: 'P1001',
+      PersonNumber: 'P1001',
       absenceType: 'Vacation',
       planName: 'Annual Leave',
       balance: 12,
@@ -355,6 +571,7 @@ export function seedStore() {
     {
       BalanceId: 'B2',
       personNumber: 'P1002',
+      PersonNumber: 'P1002',
       absenceType: 'Sick',
       planName: 'Sick Leave',
       balance: 5,
@@ -416,17 +633,21 @@ export function seedStore() {
     { GradeId: 'G2', GradeCode: 'M1', Name: 'Manager 1', Status: 'A' },
   ];
 
-  const timeRecords: TimeRecord[] = [
+  const timeRecords1001: TimeRecord[] = [
     {
       timeRecordId: 'TR1',
+      TimeRecordId: 'TR1',
       personNumber: 'P1001',
       startTime: '2026-09-15T09:00:00',
       stopTime: '2026-09-15T17:00:00',
       quantity: 8,
       unit: 'HOURS',
     },
+  ];
+  const timeRecords1002: TimeRecord[] = [
     {
       timeRecordId: 'TR2',
+      TimeRecordId: 'TR2',
       personNumber: 'P1002',
       startTime: '2026-09-15T08:30:00',
       stopTime: '2026-09-15T16:30:00',
@@ -434,6 +655,25 @@ export function seedStore() {
       unit: 'HOURS',
     },
   ];
+  const timeRecordGroups: TimeRecordGroup[] = [
+    {
+      TimeRecordGroupId: 'TRG1',
+      personNumber: 'P1001',
+      Status: 'DRAFT',
+      PeriodStart: '2026-09-14',
+      PeriodEnd: '2026-09-20',
+      timeRecords: timeRecords1001,
+    },
+    {
+      TimeRecordGroupId: 'TRG2',
+      personNumber: 'P1002',
+      Status: 'DRAFT',
+      PeriodStart: '2026-09-14',
+      PeriodEnd: '2026-09-20',
+      timeRecords: timeRecords1002,
+    },
+  ];
+  const timeRecordEventRequests: TimeRecordEventRequest[] = [];
 
   const talentProfiles: TalentProfile[] = [
     {
@@ -457,13 +697,27 @@ export function seedStore() {
   const nextId = (prefix: string) => `${prefix}${++seq}`;
 
   const requisitions: Requisition[] = [
-    { RequisitionId: 'REQ1', RequisitionNumber: 'R-100', Title: 'Software Engineer', Status: 'OPEN' },
+    {
+      RequisitionId: 'REQ1',
+      RequisitionNumber: 'R-100',
+      Title: 'Software Engineer',
+      Status: 'OPEN',
+      skills: [{ SkillId: 'SK1', Name: 'Java', Importance: 1 }],
+      attachments: [{ AttachmentId: 'RATT1', FileName: 'jd.pdf', ContentType: 'application/pdf' }],
+      publishedJobs: [{ PublishedJobId: 'PJ1', Site: 'CAREER', Status: 'POSTED' }],
+    },
+  ];
+  const candidateAttachments: CandidateAttachment[] = [
+    { AttachmentId: 'ATT1', CandidateId: 'CAN1', FileName: 'resume.pdf', ContentType: 'application/pdf', UploadedAt: '2026-09-10T12:00:00Z' },
   ];
   const candidates: Candidate[] = [
-    { CandidateId: 'CAN1', DisplayName: 'Grace Hopper', Email: 'grace@example.com', Status: 'ACTIVE' },
+    { CandidateId: 'CAN1', DisplayName: 'Grace Hopper', Email: 'grace@example.com', Status: 'ACTIVE', attachments: candidateAttachments, citizenships: [{ CitizenshipId: 'CCZ1', CandidateId: 'CAN1', CitizenshipLegislationCode: 'US', CitizenshipStatus: 'A' }] },
+  ];
+  const benefitDependents: BenefitDependent[] = [
+    { DependentId: 'BD1', PersonNumber: 'P1001', DependentName: 'Charles Babbage', Relationship: 'Spouse', BirthDate: '1985-03-01' },
   ];
   const benefitEnrollments: BenefitEnrollment[] = [
-    { EnrollmentId: 'BE1', PersonNumber: 'P1001', PlanName: 'Medical PPO', Status: 'ENROLLED' },
+    { EnrollmentId: 'BE1', PersonNumber: 'P1001', PlanName: 'Medical PPO', Status: 'ENROLLED', dependents: benefitDependents, costs: [{ CostId: 'BC1', Amount: 420, Currency: 'USD' }], providers: [{ ProviderId: 'BP1', ProviderName: 'Example Health' }] },
   ];
   const positions: Position[] = [
     { PositionId: 'POS1', PositionCode: 'SWE-IC3', Name: 'SWE IC3', Status: 'A', OrganizationId: 'O1' },
@@ -471,36 +725,56 @@ export function seedStore() {
   const contacts: Contact[] = [
     { ContactId: 'CT1', PersonNumber: 'P1001', ContactName: 'Emergency Contact', Relationship: 'Spouse' },
   ];
-  const phones: Phone[] = [
-    { PhoneId: 'PH1', PersonNumber: 'P1001', PhoneNumber: '+1-555-0100', PhoneType: 'WORK' },
-  ];
-  const workerEmails: EmailRow[] = [
-    { EmailId: 'EM1', PersonNumber: 'P1001', EmailAddress: 'ada@example.com', EmailType: 'WORK' },
-  ];
-  const nationalIdentifiers: NationalId[] = [
-    { NationalIdentifierId: 'NI1', PersonNumber: 'P1001', NationalIdentifierNumber: '123-45-6789', LegislationCode: 'US' },
-  ];
-  const absenceTypes: AbsenceType[] = [
+  const absenceTypesLOV: AbsenceType[] = [
     { AbsenceTypeId: 'AT1', Name: 'Vacation', Status: 'A' },
     { AbsenceTypeId: 'AT2', Name: 'Sick', Status: 'A' },
   ];
-  const absencePlans: AbsencePlan[] = [
+  const absencePlansLOV = [
     { AbsencePlanId: 'AP1', PlanName: 'Annual Leave', Status: 'A' },
+    { AbsencePlanId: 'AP2', PlanName: 'Sick Accrual', Status: 'A' },
   ];
-  const timeCards: TimeCard[] = [
-    { TimeCardId: 'TC1', PersonNumber: 'P1001', Status: 'DRAFT', PeriodStart: '2026-09-14', PeriodEnd: '2026-09-20' },
-  ];
-  const workSchedules: WorkSchedule[] = [
-    { ScheduleId: 'WS1', ScheduleName: 'Standard 9-5', PersonNumber: 'P1001' },
+  const workforceScheduleDefinitions = [
+    { ScheduleDefinitionId: 'WS1', ScheduleId: 'WS1', ScheduleName: 'Standard 9-5', PersonNumber: 'P1001' },
   ];
   const goals: Goal[] = [
     { GoalId: 'G1', PersonNumber: 'P1001', GoalName: 'Ship MCP v0.3', Status: 'IN_PROGRESS' },
   ];
-  const performanceDocuments: PerfDoc[] = [
-    { DocumentId: 'PD1', PersonNumber: 'P1001', DocumentName: '2026 Annual Review', Status: 'OPEN' },
+  const goalPlans: GoalPlan[] = [
+    { GoalPlanId: 'GP1', PersonNumber: 'P1001', PlanName: '2026 Goals', Status: 'ACTIVE', performanceGoals: goals },
   ];
-  const learningEnrollments: LearningEnrollment[] = [
-    { EnrollmentId: 'LE1', PersonNumber: 'P1002', CourseName: 'Fusion HCM Basics', Status: 'ENROLLED' },
+  const performanceEvaluations: PerfEval[] = [
+    { EvaluationId: 'PD1', DocumentId: 'PD1', PersonNumber: 'P1001', DocumentName: '2026 Annual Review', Status: 'OPEN' },
+  ];
+  const learningCompletions: LearningCompletion[] = [
+    { CompletionId: 'LC1', PersonNumber: 'P1001', CourseName: 'Security Awareness', CompletionDate: '2026-08-15', Score: 95 },
+  ];
+  const learnerLearningRecords: LearningRecord[] = [
+    {
+      LearningRecordId: 'LE1',
+      EnrollmentId: 'LE1',
+      PersonNumber: 'P1002',
+      CourseName: 'Fusion HCM Basics',
+      Status: 'ENROLLED',
+      DueDate: '2026-10-01',
+      AssignmentId: 'LA1',
+      completionDetails: [],
+    },
+    {
+      LearningRecordId: 'LA1',
+      AssignmentId: 'LA1',
+      PersonNumber: 'P1002',
+      CourseName: 'Fusion HCM Basics',
+      Status: 'ASSIGNED',
+      DueDate: '2026-10-01',
+      completionDetails: [],
+    },
+    {
+      LearningRecordId: 'LC1R',
+      PersonNumber: 'P1001',
+      CourseName: 'Security Awareness',
+      Status: 'COMPLETED',
+      completionDetails: learningCompletions,
+    },
   ];
   const payslips: Payslip[] = [
     {
@@ -555,19 +829,6 @@ export function seedStore() {
       deductions: [{ ElementName: 'Federal Tax', Amount: 1400 }],
     },
   ];
-  const bankAccounts: BankAccount[] = [
-    {
-      BankAccountId: 'BA1',
-      PersonNumber: 'P1001',
-      BankAccountNumber: '000123456789',
-      BankName: 'Example Bank',
-      BankIdentifierCode: 'EXMPUS33',
-      BranchName: 'Downtown',
-      AccountType: 'CHECKING',
-      CurrencyCode: 'USD',
-      CountryCode: 'US',
-    },
-  ];
   const paymentMethods: PaymentMethod[] = [
     {
       PaymentMethodId: 'PM1',
@@ -580,8 +841,9 @@ export function seedStore() {
       CurrencyCode: 'USD',
     },
   ];
-  const compensationHistories: Compensation[] = [
+  const salaries: Salary[] = [
     {
+      SalaryId: 'CH1',
       CompensationId: 'CH1',
       PersonNumber: 'P1001',
       Amount: 10000,
@@ -603,8 +865,9 @@ export function seedStore() {
       InputValue: 'Amount',
     },
   ];
-  const calculationCards: CalculationCard[] = [
+  const calculationEntries: CalculationEntry[] = [
     {
+      CalculationEntryId: 'CC1',
       CalculationCardId: 'CC1',
       PersonNumber: 'P1001',
       CardType: 'Tax',
@@ -616,7 +879,8 @@ export function seedStore() {
   const atomfeeds: AtomEntry[] = [
     {
       EntryId: 'AE1',
-      Collection: 'workers',
+      Collection: 'empupdate',
+      Workspace: 'employee',
       Updated: '2026-09-18T10:00:00Z',
       published: '2026-09-18T10:00:00Z',
       Title: 'Worker 1001 updated',
@@ -629,7 +893,8 @@ export function seedStore() {
     },
     {
       EntryId: 'AE2',
-      Collection: 'absences',
+      Collection: 'empupdate',
+      Workspace: 'employee',
       Updated: '2026-09-19T08:00:00Z',
       published: '2026-09-19T08:00:00Z',
       Title: 'Absence A1 created',
@@ -640,53 +905,38 @@ export function seedStore() {
     },
     {
       EntryId: 'AE3',
-      Collection: 'workers',
+      Collection: 'empassignment',
+      Workspace: 'employee',
       Updated: '2026-09-19T12:00:00Z',
       Title: 'Worker 1002 assignment change',
       ChangeType: 'UPDATE',
       ResourceId: '1002',
       PersonNumber: 'P1002',
     },
+    {
+      EntryId: 'AE4',
+      Collection: 'workrelshipupdate',
+      Workspace: 'employee',
+      Updated: '2026-09-19T14:00:00Z',
+      Title: 'Work relationship update 1001',
+      ChangeType: 'UPDATE',
+      ResourceId: 'WR1',
+      PersonNumber: 'P1001',
+    },
   ];
-
 
   const offers: JobOffer[] = [
     { OfferId: 'OFF1', CandidateId: 'CAN1', RequisitionId: 'REQ1', Status: 'EXTENDED', ProposedSalary: 145000, Currency: 'USD' },
   ];
-  const interviews: Interview[] = [
-    { InterviewId: 'INT1', CandidateId: 'CAN1', RequisitionId: 'REQ1', ScheduledStart: '2026-09-22T15:00:00Z', Status: 'SCHEDULED', InterviewType: 'PANEL' },
-  ];
-  const candidateAttachments: CandidateAttachment[] = [
-    { AttachmentId: 'ATT1', CandidateId: 'CAN1', FileName: 'resume.pdf', ContentType: 'application/pdf', UploadedAt: '2026-09-10T12:00:00Z' },
-  ];
-  const legislativeData: LegislativeData[] = [
-    { LegislativeDataId: 'LD1', PersonNumber: 'P1001', WorkerId: '1001', LegislationCode: 'US', MaritalStatus: 'M', Sex: 'F' },
-  ];
-  const assignmentHistories: AssignmentHistory[] = [
-    { HistoryId: 'AH1', WorkerId: '1001', AssignmentId: 'AS1', EffectiveStartDate: '2024-01-15', ActionCode: 'HIRE', JobId: 'J1' },
-    { HistoryId: 'AH2', WorkerId: '1001', AssignmentId: 'AS1', EffectiveStartDate: '2025-06-01', ActionCode: 'PROMOTION', JobId: 'J1' },
-  ];
 
-  const reviewCycles: ReviewCycle[] = [
-    { ReviewCycleId: 'RC1', CycleName: '2026 Annual', Status: 'OPEN', StartDate: '2026-01-01', EndDate: '2026-12-31' },
+  const checkInDocuments: CheckInDocument[] = [
+    { CheckInDocumentId: 'CI1', CheckInId: 'CI1', PersonNumber: 'P1002', ManagerPersonNumber: 'P1001', ScheduledDate: '2026-09-25', Status: 'SCHEDULED', Notes: 'Career chat' },
   ];
-  const feedbackItems: Feedback[] = [
-    { FeedbackId: 'FB1', PersonNumber: 'P1001', FromPersonNumber: 'P1002', Comments: 'Great collaborator', Status: 'SUBMITTED' },
-  ];
-  const checkIns: CheckIn[] = [
-    { CheckInId: 'CI1', PersonNumber: 'P1002', ManagerPersonNumber: 'P1001', ScheduledDate: '2026-09-25', Status: 'SCHEDULED', Notes: 'Career chat' },
-  ];
-  const learningAssignments: LearningAssignment[] = [
-    { AssignmentId: 'LA1', PersonNumber: 'P1002', CourseName: 'Fusion HCM Basics', DueDate: '2026-10-01', Status: 'ASSIGNED' },
-  ];
-  const learningCompletions: LearningCompletion[] = [
-    { CompletionId: 'LC1', PersonNumber: 'P1001', CourseName: 'Security Awareness', CompletionDate: '2026-08-15', Score: 95 },
-  ];
-  const salaryBases: SalaryBasis[] = [
+  const salaryBasisLov: SalaryBasis[] = [
     { SalaryBasisId: 'SB1', Name: 'US Monthly', Frequency: 'MONTHLY', Currency: 'USD', Status: 'A' },
     { SalaryBasisId: 'SB2', Name: 'US Annual', Frequency: 'ANNUAL', Currency: 'USD', Status: 'A' },
   ];
-  const gradeSteps: GradeStep[] = [
+  const gradeStepsLOV: GradeStep[] = [
     { GradeStepId: 'GS1', GradeId: 'G1', StepName: 'Step 1', Sequence: 1, Amount: 90000 },
     { GradeStepId: 'GS2', GradeId: 'G1', StepName: 'Step 2', Sequence: 2, Amount: 100000 },
   ];
@@ -697,29 +947,43 @@ export function seedStore() {
   const documentRecords: DocumentRecord[] = [
     { DocumentRecordId: 'DR1', PersonNumber: 'P1001', DocumentType: 'I9', FileName: 'i9.pdf', UploadedAt: '2026-01-10T10:00:00Z', Status: 'ACTIVE' },
   ];
-  const workerJourneys: WorkerJourney[] = [
-    { JourneyId: 'JN1', PersonNumber: 'P1002', JourneyName: 'New Hire Onboarding', Status: 'IN_PROGRESS', JourneyType: 'ONBOARDING' },
-  ];
   const journeyTasks: JourneyTask[] = [
     { JourneyTaskId: 'JT1', JourneyId: 'JN1', TaskName: 'Complete profile', Status: 'COMPLETE', DueDate: '2026-09-01' },
     { JourneyTaskId: 'JT2', JourneyId: 'JN1', TaskName: 'Benefits enrollment', Status: 'PENDING', DueDate: '2026-09-30' },
   ];
-  const benefitDependents: BenefitDependent[] = [
-    { DependentId: 'BD1', PersonNumber: 'P1001', DependentName: 'Charles Babbage', Relationship: 'Spouse', BirthDate: '1985-03-01' },
+  const workerJourneys: WorkerJourney[] = [
+    { JourneyId: 'JN1', PersonNumber: 'P1002', JourneyName: 'New Hire Onboarding', Status: 'IN_PROGRESS', JourneyType: 'ONBOARDING', tasks: journeyTasks },
   ];
-  const lifeEvents: LifeEvent[] = [
+  const lifeEventsLOV: LifeEvent[] = [
     { LifeEventId: 'LE1', PersonNumber: 'P1001', EventType: 'MARRIAGE', EventDate: '2026-06-01', Status: 'PROCESSED' },
   ];
-  const talentPools: TalentPool[] = [
+  const talentPoolsLOV: TalentPool[] = [
     { TalentPoolId: 'TPOL1', PoolName: 'High Potential IC', Status: 'A', MemberCount: 2 },
   ];
-  const payrollCosting: PayrollCosting[] = [
+  const assignmentCosting: PayrollCosting[] = [
     { CostingId: 'PC1', PersonNumber: 'P1001', CostCenter: 'CC-ENG', Percentage: 100, ElementName: 'Regular Salary' },
   ];
+  const payrollRelationshipCosting: PayrollCosting[] = [
+    { CostingId: 'PRC1', PersonNumber: 'P1001', CostCenter: 'CC-ENG', Percentage: 100, ElementName: 'Regular Salary' },
+  ];
+  const timeEventRequests: TimeEventRequest[] = [
+    {
+      timeEventRequestId: 'TER1',
+      TimeEventRequestId: 'TER1',
+      requestNumber: '20107',
+      sourceId: 'HWM_CLOCK_TIME',
+      Status: 'PROCESSED',
+      timeEvents: [{ timeEventId: 'TE1', supplierDeviceEvent: 'HWM_CLOCK_TIME_IN' }],
+    },
+  ];
+  const jobsLov = jobs.map((j) => ({ ...j }));
+  const gradesLov = grades.map((g) => ({ ...g }));
+  const locationsLov = locations.map((l) => ({ ...l }));
+  const gradeLaddersLov = [{ GradeLadderId: 'GL1', Name: 'US Comp Ladder', Status: 'A' }];
+  const gradeRatesLOV = [{ GradeRateId: 'GR1', Name: 'US Annual Rate', Currency: 'USD' }];
 
   return {
     workers,
-    workerAssignments,
     absences,
     balances,
     aors,
@@ -729,7 +993,8 @@ export function seedStore() {
     locations,
     jobs,
     grades,
-    timeRecords,
+    timeRecordGroups,
+    timeRecordEventRequests,
     talentProfiles,
     payrollRelationships,
     requisitions,
@@ -737,43 +1002,36 @@ export function seedStore() {
     benefitEnrollments,
     positions,
     contacts,
-    phones,
-    workerEmails,
-    nationalIdentifiers,
-    absenceTypes,
-    absencePlans,
-    timeCards,
-    workSchedules,
-    goals,
-    performanceDocuments,
-    learningEnrollments,
+    absenceTypesLOV,
+    absencePlansLOV,
+    workforceScheduleDefinitions,
+    goalPlans,
+    performanceEvaluations,
+    learnerLearningRecords,
     payslips,
-    bankAccounts,
     paymentMethods,
-    compensationHistories,
+    salaries,
     elementEntries,
-    calculationCards,
+    calculationEntries,
     atomfeeds,
     offers,
-    interviews,
-    candidateAttachments,
-    legislativeData,
-    assignmentHistories,
-    reviewCycles,
-    feedbackItems,
-    checkIns,
-    learningAssignments,
-    learningCompletions,
-    salaryBases,
-    gradeSteps,
+    checkInDocuments,
+    salaryBasisLov,
+    gradeStepsLOV,
     jobFamilies,
     documentRecords,
     workerJourneys,
     journeyTasks,
-    benefitDependents,
-    lifeEvents,
-    talentPools,
-    payrollCosting,
+    lifeEventsLOV,
+    talentPoolsLOV,
+    assignmentCosting,
+    payrollRelationshipCosting,
+    timeEventRequests,
+    jobsLov,
+    gradesLov,
+    locationsLov,
+    gradeLaddersLov,
+    gradeRatesLOV,
     nextId,
   };
 }

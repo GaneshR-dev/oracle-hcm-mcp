@@ -12,6 +12,10 @@ import {
   errorResult,
   bindExecutor,
   recordAudit,
+  listWorkerChild,
+  getWorkerChildById,
+  listOfficialAtom,
+  patchAssignmentById,
 } from './helpers.js';
 import { publicConfigView } from '../../config.js';
 import { ALLOWED_ROOTS, assertAllowlisted, isBlockedPath } from '../../policy/allowlist.js';
@@ -22,11 +26,12 @@ import { RESOURCE_CATALOG } from './register-core.js';
 import { WebhookReceiver } from '../../platform/webhookStub.js';
 import { redactDeep } from '../../platform/redact.js';
 import {
-  parseAtomEntry,
   entriesAfterCursor,
   entryCursor,
   feedIdForCollection,
+  entriesToAtomXml,
 } from '../../platform/atomCdc.js';
+import { ATOM_FEEDS } from '../../policy/atom.js';
 import {
   listFinders,
   describeFinder,
@@ -84,18 +89,20 @@ function registerAtom(server: McpServer, ctx: ToolContext): void {
     'hcm_list_atom_feeds',
     {
       description:
-        'List known Atom / change-detection feeds (collection-oriented). Dummy exposes workers/absences/all.',
+        'List official Fusion Atom feeds under /hcmRestApi/atomservlet/{workspace}/{collection}.',
       inputSchema: {},
       annotations: { readOnlyHint: true },
     },
     async () =>
       runRead(async () => {
-        const feeds = [
-          { feedId: 'atom:workers', title: 'Workers changes', collection: 'workers', href: 'atomfeeds?q=Collection=workers' },
-          { feedId: 'atom:absences', title: 'Absences changes', collection: 'absences', href: 'atomfeeds?q=Collection=absences' },
-          { feedId: 'atom:all', title: 'All Atom entries', collection: '*', href: 'atomfeeds' },
-        ];
-        return { feeds, note: 'Unofficial Atom feed list — not Oracle CDC catalog.' };
+        const feeds = ATOM_FEEDS.map((f) => ({
+          feedId: `atom:${f.workspace}/${f.collection}`,
+          title: f.title,
+          workspace: f.workspace,
+          collection: f.collection,
+          href: `atomservlet/${f.workspace}/${f.collection}`,
+        }));
+        return { feeds, note: 'Official Atom servlet paths — not resources/{version}/atomfeeds.' };
       }, ctx, 'hcm_list_atom_feeds'),
   );
 
@@ -105,7 +112,7 @@ function registerAtom(server: McpServer, ctx: ToolContext): void {
       description:
         'Get an Atom feed as JSON entries (or request format=atom for XML via dummy). Supports since ISO filter.',
       inputSchema: {
-        collection: z.string().optional().describe('workers | absences | omit for all'),
+        collection: z.string().optional().describe('empupdate | employee/empupdate | all'),
         since: z.string().optional(),
         limit: z.number().int().positive().optional(),
         format: z.enum(['json', 'atom']).optional(),
@@ -114,11 +121,10 @@ function registerAtom(server: McpServer, ctx: ToolContext): void {
     },
     async (args) =>
       runRead(async () => {
-        const feed = await ctx.client.list('atomfeeds', {
-          q: args.collection ? `Collection=${args.collection}` : undefined,
+        const feed = await listOfficialAtom(ctx.client, args.collection, {
           limit: args.limit ?? 50,
         });
-        let entries = (feed.items as Record<string, unknown>[]).map(parseAtomEntry);
+        let entries = feed.items;
         if (args.since) {
           const sinceMs = Date.parse(args.since);
           entries = entries.filter((e) => Date.parse(e.updated) >= sinceMs);
@@ -145,35 +151,42 @@ function registerAtom(server: McpServer, ctx: ToolContext): void {
     'hcm_list_atom_entries',
     {
       description:
-        'List Atom feed / change-detection entries (Fusion atomfeeds). Dummy returns mock change events.',
-      inputSchema: { ...listArgs, collection: z.string().optional().describe('e.g. workers') },
+        'List Atom feed entries via official atomservlet (default employee/empupdate).',
+      inputSchema: { ...listArgs, collection: z.string().optional().describe('e.g. empupdate') },
       annotations: { readOnlyHint: true },
     },
     async (args) =>
-      runRead(
-        () =>
-          ctx.client.list('atomfeeds', {
-            q: args.q ?? (args.collection ? `Collection=${args.collection}` : undefined),
-            finder: args.finder,
-            limit: args.limit ?? 25,
-            offset: args.offset ?? 0,
-          }),
-        ctx,
-        'hcm_list_atom_entries',
-      ),
+      runRead(async () => {
+        const feed = await listOfficialAtom(ctx.client, args.collection, {
+          q: args.q,
+          limit: args.limit ?? 25,
+        });
+        return { items: feed.items, count: feed.count, feedId: feed.feedId };
+      }, ctx, 'hcm_list_atom_entries'),
   );
 
   server.registerTool(
     'hcm_get_atom_entry',
     {
-      description: 'Get a single Atom entry by EntryId.',
-      inputSchema: { entryId: z.string() },
+      description: 'Get a single Atom entry by EntryId (scans official atomservlet feeds).',
+      inputSchema: { entryId: z.string(), collection: z.string().optional() },
       annotations: { readOnlyHint: true },
     },
-    async ({ entryId }) =>
+    async ({ entryId, collection }) =>
       runRead(async () => {
-        const raw = await ctx.client.getJson(`atomfeeds/${encodeURIComponent(entryId)}`);
-        return parseAtomEntry(raw as Record<string, unknown>);
+        const tryFeeds = collection
+          ? [collection]
+          : ATOM_FEEDS.map((f) => `${f.workspace}/${f.collection}`);
+        for (const c of tryFeeds) {
+          try {
+            const feed = await listOfficialAtom(ctx.client, c);
+            const hit = feed.items.find((e) => e.entryId === entryId);
+            if (hit) return hit;
+          } catch {
+            /* next */
+          }
+        }
+        throw new Error(`Atom entry not found: ${entryId}`);
       }, ctx, 'hcm_get_atom_entry'),
   );
 
@@ -191,21 +204,18 @@ function registerAtom(server: McpServer, ctx: ToolContext): void {
     },
     async (args) =>
       runRead(async () => {
-        const feed = await ctx.client.list('atomfeeds', {
-          q: args.collection ? `Collection=${args.collection}` : undefined,
-          limit: args.limit ?? 50,
-        });
+        const feed = await listOfficialAtom(ctx.client, args.collection, { limit: args.limit ?? 50 });
         const sinceMs = args.since ? Date.parse(args.since) : 0;
-        const items = (feed.items as Record<string, unknown>[]).filter((it) => {
-          const u = String(it.Updated ?? it.published ?? it.updated ?? '');
-          const t = Date.parse(u);
+        const items = feed.items.filter((it) => {
+          const t = Date.parse(it.updated);
           return !sinceMs || (Number.isFinite(t) && t >= sinceMs);
         });
         return {
           since: args.since ?? null,
+          feedId: feed.feedId,
           count: items.length,
           items,
-          note: 'Unofficial change detection over atomfeeds; not Oracle CDC.',
+          note: 'Unofficial change detection over official atomservlet; not Oracle CDC.',
         };
       }, ctx, 'hcm_detect_changes'),
   );
@@ -224,14 +234,10 @@ function registerAtom(server: McpServer, ctx: ToolContext): void {
     },
     async (args) =>
       runRead(async () => {
-        const collection = args.collection && args.collection !== 'all' ? args.collection : undefined;
-        const feedId = feedIdForCollection(collection ?? 'all');
+        const feed = await listOfficialAtom(ctx.client, args.collection, { limit: args.limit ?? 100 });
+        const feedId = feed.feedId;
         const cp = ctx.atomCheckpoints.get(feedId);
-        const feed = await ctx.client.list('atomfeeds', {
-          q: collection ? `Collection=${collection}` : undefined,
-          limit: args.limit ?? 100,
-        });
-        const parsed = (feed.items as Record<string, unknown>[]).map(parseAtomEntry);
+        const parsed = feed.items;
         let cursor = cp?.cursor;
         if (args.since) {
           cursor = `${args.since}::`;
@@ -262,14 +268,10 @@ function registerAtom(server: McpServer, ctx: ToolContext): void {
     },
     async (args) =>
       runRead(async () => {
-        const collection = args.collection && args.collection !== 'all' ? args.collection : undefined;
-        const feedId = feedIdForCollection(collection ?? 'all');
+        const feed = await listOfficialAtom(ctx.client, args.collection, { limit: args.limit ?? 100 });
+        const feedId = feed.feedId;
         const cp = ctx.atomCheckpoints.get(feedId);
-        const feed = await ctx.client.list('atomfeeds', {
-          q: collection ? `Collection=${collection}` : undefined,
-          limit: args.limit ?? 100,
-        });
-        const parsed = (feed.items as Record<string, unknown>[]).map(parseAtomEntry);
+        const parsed = feed.items;
         const fresh = entriesAfterCursor(parsed, cp?.cursor);
         const batch = fresh.slice(0, args.limit ?? 100);
         let checkpoint = cp;
@@ -423,25 +425,6 @@ function registerChecklistExtra(server: McpServer, ctx: ToolContext): void {
     },
     async (args) => gateWrite(ctx, 'hcm_allocate_checklist', args),
   );
-
-  bindExecutor(ctx, 'hcm_force_close_checklist', async (args) =>
-    ctx.client.postJson(
-      `allocatedChecklists/${encodeURIComponent(String(args.checklistId))}/action/forceClose`,
-      args.body ?? {},
-    ),
-  );
-  server.registerTool(
-    'hcm_force_close_checklist',
-    {
-      description: 'Force-close an allocated checklist (approval unless --write).',
-      inputSchema: {
-        checklistId: z.string(),
-        body: z.record(z.unknown()).optional(),
-      },
-      annotations: { readOnlyHint: false, destructiveHint: true },
-    },
-    async (args) => gateWrite(ctx, 'hcm_force_close_checklist', args),
-  );
 }
 
 function registerAssignmentWrites(server: McpServer, ctx: ToolContext): void {
@@ -469,16 +452,25 @@ function registerAssignmentWrites(server: McpServer, ctx: ToolContext): void {
   );
 
   bindExecutor(ctx, 'hcm_update_worker_assignment', async (args) =>
-    ctx.client.patchJson(
-      `workerAssignments/${encodeURIComponent(String(args.assignmentId))}`,
+    patchAssignmentById(
+      ctx.client,
+      String(args.assignmentId),
       args.body,
+      args.workerId ? String(args.workerId) : undefined,
+      args.periodOfServiceId ? String(args.periodOfServiceId) : undefined,
     ),
   );
   server.registerTool(
     'hcm_update_worker_assignment',
     {
-      description: 'PATCH a worker assignment (approval unless --write).',
-      inputSchema: { assignmentId: z.string(), body: z.record(z.unknown()) },
+      description:
+        'PATCH nested workers/{id}/child/workRelationships/{wr}/child/assignments/{asg} (approval unless --write).',
+      inputSchema: {
+        assignmentId: z.string(),
+        workerId: z.string().optional(),
+        periodOfServiceId: z.string().optional(),
+        body: z.record(z.unknown()),
+      },
       annotations: { readOnlyHint: false },
     },
     async (args) => gateWrite(ctx, 'hcm_update_worker_assignment', args),
@@ -756,13 +748,31 @@ function registerCoreHrExtra(server: McpServer, ctx: ToolContext): void {
   );
   server.registerTool(
     'hcm_search_phones',
-    { description: 'Search worker phones.', inputSchema: listArgs, annotations: { readOnlyHint: true } },
-    listHandler(ctx, 'workerPhones', 'hcm_search_phones'),
+    {
+      description: 'Search worker phones via workers/{id}/child/phones.',
+      inputSchema: { ...listArgs, workerId: z.string().optional() },
+      annotations: { readOnlyHint: true },
+    },
+    async (args) =>
+      runRead(
+        () => listWorkerChild(ctx.client, 'phones', args),
+        ctx,
+        'hcm_search_phones',
+      ),
   );
   server.registerTool(
     'hcm_search_emails',
-    { description: 'Search worker emails.', inputSchema: listArgs, annotations: { readOnlyHint: true } },
-    listHandler(ctx, 'workerEmails', 'hcm_search_emails'),
+    {
+      description: 'Search worker emails via workers/{id}/child/emails.',
+      inputSchema: { ...listArgs, workerId: z.string().optional() },
+      annotations: { readOnlyHint: true },
+    },
+    async (args) =>
+      runRead(
+        () => listWorkerChild(ctx.client, 'emails', args),
+        ctx,
+        'hcm_search_emails',
+      ),
   );
   server.registerTool(
     'hcm_get_work_relationship',
@@ -863,7 +873,7 @@ function registerManagerOrg(server: McpServer, ctx: ToolContext): void {
     async (args) =>
       runRead(
         () =>
-          ctx.client.list('locations', {
+          ctx.client.list('locationsV2', {
             finder: args.finder ?? 'findByCountry',
             q: args.q ?? (args.country ? `Country=${args.country}` : undefined),
             limit: args.limit ?? 25,
@@ -878,12 +888,7 @@ function registerTimeAbsenceExtra(server: McpServer, ctx: ToolContext): void {
   server.registerTool(
     'hcm_search_absence_types',
     { description: 'Search absence types LOV.', inputSchema: listArgs, annotations: { readOnlyHint: true } },
-    listHandler(ctx, 'absenceTypes', 'hcm_search_absence_types'),
-  );
-  server.registerTool(
-    'hcm_search_absence_plans',
-    { description: 'Search absence plans LOV.', inputSchema: listArgs, annotations: { readOnlyHint: true } },
-    listHandler(ctx, 'absencePlans', 'hcm_search_absence_plans'),
+    listHandler(ctx, 'absenceTypesLOV', 'hcm_search_absence_types'),
   );
   server.registerTool(
     'hcm_get_absence_type_balance',
@@ -911,12 +916,12 @@ function registerTimeAbsenceExtra(server: McpServer, ctx: ToolContext): void {
   );
 
   bindExecutor(ctx, 'hcm_submit_time_card', async (args) =>
-    ctx.client.postJson('timeCards/action/submit', args.body ?? args),
+    ctx.client.postJson('timeRecordEventRequests', args.body ?? args),
   );
   server.registerTool(
     'hcm_submit_time_card',
     {
-      description: 'Submit a time card (approval unless --write).',
+      description: 'Submit time via official POST timeRecordEventRequests (approval unless --write).',
       inputSchema: { body: z.record(z.unknown()) },
       annotations: { readOnlyHint: false },
     },
@@ -925,19 +930,19 @@ function registerTimeAbsenceExtra(server: McpServer, ctx: ToolContext): void {
 
   server.registerTool(
     'hcm_search_schedules',
-    { description: 'Search work schedules.', inputSchema: listArgs, annotations: { readOnlyHint: true } },
-    listHandler(ctx, 'workSchedules', 'hcm_search_schedules'),
+    { description: 'Search workforce schedule definitions.', inputSchema: listArgs, annotations: { readOnlyHint: true } },
+    listHandler(ctx, 'workforceScheduleDefinitions', 'hcm_search_schedules'),
   );
   server.registerTool(
     'hcm_get_schedule',
     {
-      description: 'Get work schedule by id.',
+      description: 'Get workforce schedule definition by id.',
       inputSchema: { scheduleId: z.string() },
       annotations: { readOnlyHint: true },
     },
     async ({ scheduleId }) =>
       runRead(
-        () => ctx.client.getJson(`workSchedules/${encodeURIComponent(scheduleId)}`),
+        () => ctx.client.getJson(`workforceScheduleDefinitions/${encodeURIComponent(scheduleId)}`),
         ctx,
         'hcm_get_schedule',
       ),
@@ -947,18 +952,57 @@ function registerTimeAbsenceExtra(server: McpServer, ctx: ToolContext): void {
 function registerTalentLearning(server: McpServer, ctx: ToolContext): void {
   server.registerTool(
     'hcm_search_goals',
-    { description: 'Search talent goals.', inputSchema: listArgs, annotations: { readOnlyHint: true } },
-    listHandler(ctx, 'goals', 'hcm_search_goals'),
+    { description: 'Search talent goals via official goalPlans (flattened child/performanceGoals).', inputSchema: listArgs, annotations: { readOnlyHint: true } },
+    async (args) =>
+      runRead(async () => {
+        const plans = await ctx.client.list('goalPlans', {
+          q: args.q, finder: args.finder, limit: args.limit ?? 25, offset: args.offset ?? 0,
+        });
+        const items: Record<string, unknown>[] = [];
+        for (const p of plans.items as { GoalPlanId?: string; performanceGoals?: Record<string, unknown>[] }[]) {
+          if (Array.isArray(p.performanceGoals) && p.performanceGoals.length) {
+            for (const g of p.performanceGoals) items.push({ ...g, GoalPlanId: p.GoalPlanId });
+          } else if (p.GoalPlanId) {
+            try {
+              const child = await ctx.client.list(
+                `goalPlans/${encodeURIComponent(p.GoalPlanId)}/child/performanceGoals`,
+              );
+              for (const g of child.items as Record<string, unknown>[]) {
+                items.push({ ...g, GoalPlanId: p.GoalPlanId });
+              }
+            } catch {
+              items.push(p as Record<string, unknown>);
+            }
+          }
+        }
+        return { items, count: items.length, hasMore: false };
+      }, ctx, 'hcm_search_goals'),
   );
   server.registerTool(
     'hcm_get_goal',
     {
-      description: 'Get goal by id.',
+      description: 'Get a performance goal by id (under goalPlans/*/child/performanceGoals).',
       inputSchema: { goalId: z.string() },
       annotations: { readOnlyHint: true },
     },
     async ({ goalId }) =>
-      runRead(() => ctx.client.getJson(`goals/${encodeURIComponent(goalId)}`), ctx, 'hcm_get_goal'),
+      runRead(async () => {
+        const plans = await ctx.client.list('goalPlans', { limit: 50 });
+        for (const p of plans.items as { GoalPlanId?: string; performanceGoals?: { GoalId?: string }[] }[]) {
+          const hit = (p.performanceGoals ?? []).find((g) => String(g.GoalId) === goalId);
+          if (hit) return hit;
+          if (p.GoalPlanId) {
+            try {
+              return await ctx.client.getJson(
+                `goalPlans/${encodeURIComponent(p.GoalPlanId)}/child/performanceGoals/${encodeURIComponent(goalId)}`,
+              );
+            } catch {
+              /* next */
+            }
+          }
+        }
+        throw new Error(`Goal ${goalId} not found under goalPlans`);
+      }, ctx, 'hcm_get_goal'),
   );
   server.registerTool(
     'hcm_search_performance_documents',
@@ -967,19 +1011,19 @@ function registerTalentLearning(server: McpServer, ctx: ToolContext): void {
       inputSchema: listArgs,
       annotations: { readOnlyHint: true },
     },
-    listHandler(ctx, 'performanceDocuments', 'hcm_search_performance_documents'),
+    listHandler(ctx, 'performanceEvaluations', 'hcm_search_performance_documents'),
   );
   server.registerTool(
     'hcm_get_performance_document',
     {
-      description: 'Get performance document by id.',
+      description: 'Get performance evaluation by id (official performanceEvaluations).',
       inputSchema: { documentId: z.string() },
       annotations: { readOnlyHint: true },
     },
     async ({ documentId }) =>
       runRead(
         () =>
-          ctx.client.getJson(`performanceDocuments/${encodeURIComponent(documentId)}`),
+          ctx.client.getJson(`performanceEvaluations/${encodeURIComponent(documentId)}`),
         ctx,
         'hcm_get_performance_document',
       ),
@@ -991,19 +1035,19 @@ function registerTalentLearning(server: McpServer, ctx: ToolContext): void {
       inputSchema: listArgs,
       annotations: { readOnlyHint: true },
     },
-    listHandler(ctx, 'learningEnrollments', 'hcm_search_learning_enrollments'),
+    listHandler(ctx, 'learnerLearningRecords', 'hcm_search_learning_enrollments'),
   );
   server.registerTool(
     'hcm_get_learning_enrollment',
     {
-      description: 'Get learning enrollment by id.',
+      description: 'Get learning record by id (official learnerLearningRecords).',
       inputSchema: { enrollmentId: z.string() },
       annotations: { readOnlyHint: true },
     },
     async ({ enrollmentId }) =>
       runRead(
         () =>
-          ctx.client.getJson(`learningEnrollments/${encodeURIComponent(enrollmentId)}`),
+          ctx.client.getJson(`learnerLearningRecords/${encodeURIComponent(enrollmentId)}`),
         ctx,
         'hcm_get_learning_enrollment',
       ),
@@ -1047,18 +1091,40 @@ function registerSensitivePayroll(server: McpServer, ctx: ToolContext): void {
 
   sensList('hcm_search_payslips', 'payslips', 'Search payslips.');
   sensGet('hcm_get_payslip', 'payslips', 'payslipId', 'Get payslip by id.');
-  sensList('hcm_search_national_identifiers', 'nationalIdentifiers', 'Search national identifiers.');
-  sensGet(
-    'hcm_get_national_identifier',
-    'nationalIdentifiers',
-    'nationalIdentifierId',
-    'Get national identifier.',
+  bindExecutor(ctx, 'hcm_search_national_identifiers', async (args) =>
+    listWorkerChild(ctx.client, 'nationalIdentifiers', {
+      q: args.q as string | undefined,
+      workerId: args.workerId as string | undefined,
+      limit: (args.limit as number) ?? 25,
+      offset: (args.offset as number) ?? 0,
+    }),
   );
-  sensList('hcm_search_bank_accounts', 'bankAccounts', 'Search bank accounts.');
-  sensGet('hcm_get_bank_account', 'bankAccounts', 'bankAccountId', 'Get bank account.');
+  server.registerTool(
+    'hcm_search_national_identifiers',
+    {
+      description: 'Search national identifiers via workers/{id}/child/nationalIdentifiers. SENSITIVE.',
+      inputSchema: { ...listArgs, workerId: z.string().optional() },
+      annotations: { readOnlyHint: true },
+    },
+    async (args) => gateWrite(ctx, 'hcm_search_national_identifiers', args as Record<string, unknown>),
+  );
+  bindExecutor(ctx, 'hcm_get_national_identifier', async (args) =>
+    getWorkerChildById(ctx.client, 'nationalIdentifiers', String(args.nationalIdentifierId), [
+      'NationalIdentifierId',
+    ]),
+  );
+  server.registerTool(
+    'hcm_get_national_identifier',
+    {
+      description: 'Get national identifier via workers child collection. SENSITIVE.',
+      inputSchema: { nationalIdentifierId: z.string() },
+      annotations: { readOnlyHint: true },
+    },
+    async (args) => gateWrite(ctx, 'hcm_get_national_identifier', args as Record<string, unknown>),
+  );
   sensList('hcm_search_payment_methods', 'personalPaymentMethods', 'Search payment methods.');
-  sensList('hcm_search_compensation', 'compensationHistories', 'Search compensation history.');
-  sensGet('hcm_get_compensation', 'compensationHistories', 'compensationId', 'Get compensation row.');
+  sensList('hcm_search_compensation', 'salaries', 'Search salaries (official salaries collection).');
+  sensGet('hcm_get_compensation', 'salaries', 'compensationId', 'Get salary row by SalaryId.');
 
   server.registerTool(
     'hcm_search_element_entries',
@@ -1076,7 +1142,7 @@ function registerSensitivePayroll(server: McpServer, ctx: ToolContext): void {
       inputSchema: listArgs,
       annotations: { readOnlyHint: true },
     },
-    listHandler(ctx, 'calculationCards', 'hcm_search_calculation_cards'),
+    listHandler(ctx, 'calculationEntries', 'hcm_search_calculation_cards'),
   );
 }
 

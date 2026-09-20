@@ -230,6 +230,11 @@ export function resourcesBase(cfg: Config): string {
   return `${cfg.baseUrl}/resources/${cfg.apiVersion}`;
 }
 
+/** Fusion Atom servlet base — sibling of resources/, not under it. */
+export function atomservletBase(cfg: Config): string {
+  return `${cfg.baseUrl.replace(/\/+$/, '')}/atomservlet`;
+}
+
 /** Redacted view safe for setup/status tools and logs */
 export function publicConfigView(cfg: Config): Record<string, unknown> {
   return {

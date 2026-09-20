@@ -53,20 +53,34 @@ describe('allowlist', () => {
     expect(isAllowlistedPath('locations')).toBe(true);
     expect(isAllowlistedPath('recruitingJobRequisitions')).toBe(true);
     expect(isAllowlistedPath('payslips')).toBe(true);
-    expect(isAllowlistedPath('atomfeeds')).toBe(true);
+    expect(isAllowlistedPath('timeRecordGroups')).toBe(true);
     expect(isAllowlistedPath('jobs')).toBe(true);
     expect(isAllowlistedPath('grades')).toBe(true);
-    expect(isAllowlistedPath('timeRecords')).toBe(true);
     expect(isAllowlistedPath('talentPersonProfiles')).toBe(true);
     expect(isAllowlistedPath('payrollRelationships')).toBe(true);
-    expect(isAllowlistedPath('workerAssignments')).toBe(true);
+    expect(isAllowlistedPath('workers/1001/child/emails')).toBe(true);
     expect(isAllowlistedPath('benefitEnrollments')).toBe(true);
-    expect(isAllowlistedPath('learningEnrollments')).toBe(true);
+    expect(isAllowlistedPath('learnerLearningRecords')).toBe(true);
+    expect(isAllowlistedPath('goalPlans')).toBe(true);
+    expect(isAllowlistedPath('checkInDocuments')).toBe(true);
+    expect(isAllowlistedPath('absenceTypesLOV')).toBe(true);
+    expect(isAllowlistedPath('absencePlansLOV')).toBe(true);
+    expect(isAllowlistedPath('salaryBasisLov')).toBe(true);
+    expect(isAllowlistedPath('timeEventRequests')).toBe(true);
+    expect(isAllowlistedPath('jobsLov')).toBe(true);
+    expect(isAllowlistedPath('workers/1001/child/addresses')).toBe(true);
   });
 
-  it('keeps legacy aliases allowlisted', () => {
-    expect(isAllowlistedPath('absencesBalances')).toBe(true);
-    expect(isAllowlistedPath('workflowNotifications')).toBe(true);
+  it('rejects invented aliases that are not official Fusion collections', () => {
+    expect(isAllowlistedPath('atomfeeds')).toBe(false);
+    expect(isAllowlistedPath('timeRecords')).toBe(false);
+    expect(isAllowlistedPath('workerAssignments')).toBe(false);
+    expect(isAllowlistedPath('learningEnrollments')).toBe(false);
+    expect(isAllowlistedPath('absencesBalances')).toBe(false);
+    expect(isAllowlistedPath('workflowNotifications')).toBe(false);
+    expect(isAllowlistedPath('bankAccounts')).toBe(false);
+    expect(isAllowlistedPath('reviewCycles')).toBe(false);
+    expect(isAllowlistedPath('otbiReports')).toBe(false);
   });
 
   it('blocks CE / generative AI style paths', () => {

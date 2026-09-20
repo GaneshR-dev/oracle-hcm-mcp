@@ -189,14 +189,13 @@ describe('ApprovalStore unit with TTL', () => {
 });
 
 describe('Fusion path alignment against dummy', () => {
-  it('reads planBalances and legacy absencesBalances alias', async () => {
+  it('reads planBalances (official collection only)', async () => {
     const client = new HcmClient(testConfig());
     const primary = await client.list('planBalances', { q: 'personNumber=P1001' });
     expect(primary.items.length).toBeGreaterThan(0);
-    const legacy = await client.list('absencesBalances', { limit: 5 });
-    expect(legacy.items.length).toBeGreaterThan(0);
     const one = await client.getJson<{ BalanceId: string }>('planBalances/B1');
     expect(one.BalanceId).toBe('B1');
+    await expect(client.list('absencesBalances', { limit: 5 })).rejects.toThrow(/allowlist/i);
   });
 
   it('lists businessProcessNotifications and performAction', async () => {
@@ -228,9 +227,98 @@ describe('Fusion path alignment against dummy', () => {
     expect((await client.list('locations')).items.length).toBeGreaterThan(0);
     expect((await client.list('jobs')).items.length).toBeGreaterThan(0);
     expect((await client.list('grades')).items.length).toBeGreaterThan(0);
-    expect((await client.list('timeRecords')).items.length).toBeGreaterThan(0);
+    expect((await client.list('timeRecordGroups')).items.length).toBeGreaterThan(0);
     expect((await client.list('talentPersonProfiles')).items.length).toBeGreaterThan(0);
     expect((await client.list('payrollRelationships')).items.length).toBeGreaterThan(0);
-    expect((await client.list('workerAssignments', { q: 'WorkerId=1001' })).items.length).toBeGreaterThan(0);
+    const asg = await client.getJson<{ workRelationships?: { assignments?: unknown[] }[] }>(
+      'workers/1001',
+      { expand: 'workRelationships.assignments' },
+    );
+    expect((asg.workRelationships?.[0]?.assignments ?? []).length).toBeGreaterThan(0);
+    await expect(client.list('workerAssignments', { q: 'WorkerId=1001' })).rejects.toThrow(/allowlist/i);
+    await expect(client.list('timeRecords')).rejects.toThrow(/allowlist/i);
+  });
+});
+
+describe('dummy HCM 404s invented collections (Fusion-shaped)', () => {
+  const auth = () => ({
+    Authorization: `Basic ${Buffer.from('demo:demo').toString('base64')}`,
+  });
+  const resources = (p: string) =>
+    `http://127.0.0.1:${port}/hcmRestApi/resources/11.13.18.05/${p}`;
+  const atom = (p: string) => `http://127.0.0.1:${port}/hcmRestApi/atomservlet/${p}`;
+
+  it('404s invented resource roots that are not public HCM REST', async () => {
+    const invented = [
+      'atomfeeds',
+      'workerAssignments',
+      'timeRecords',
+      'timeCards',
+      'reviewCycles',
+      'otbiReports',
+      'bankAccounts',
+      'recruitingInterviews',
+      'absencePlans',
+      'performanceFeedback',
+      'workSchedules',
+      'learningEnrollments',
+      'absencesBalances',
+      'workflowNotifications',
+    ];
+    for (const p of invented) {
+      const res = await fetch(resources(p), { headers: auth() });
+      expect(res.status, p).toBe(404);
+    }
+  });
+
+  it('serves official nested children and collections', async () => {
+    const ok = async (p: string) => {
+      const res = await fetch(resources(p), { headers: auth() });
+      expect(res.status, p).toBe(200);
+      return res.json() as Promise<Record<string, unknown>>;
+    };
+    const emails = await ok('workers/1001/child/emails');
+    expect((emails.items as unknown[]).length).toBeGreaterThan(0);
+    await ok('workers/1001/child/nationalIdentifiers');
+    await ok('workers/1001/child/workRelationships/WR1/child/assignments');
+    await ok('timeRecordGroups');
+    await ok('goalPlans/GP1/child/performanceGoals');
+    await ok('learnerLearningRecords');
+    await ok('checkInDocuments');
+    await ok('salaries');
+    await ok('absencePlansLOV');
+    await ok('workers/1001/child/addresses');
+    await ok('workers/1001/child/visasPermits');
+    await ok('workers/1001/child/workRelationships/WR1/child/assignments/AS1/child/gradeSteps');
+    await ok('timeEventRequests');
+    await ok('jobsLov');
+    await ok('recruitingJobRequisitions/REQ1/child/skills');
+    await ok('benefitEnrollments/BE1/child/costs');
+  });
+
+  it('404s invented actions; serves official loadProjectedBalance', async () => {
+    const post = (p: string) =>
+      fetch(resources(p), {
+        method: 'POST',
+        headers: { ...auth(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ personNumber: 'P1001', startDate: '2026-10-01', endDate: '2026-10-02' }),
+      });
+    expect((await post('absences/action/previewEntitlement')).status).toBe(404);
+    expect((await post('benefitEnrollments/action/enroll')).status).toBe(404);
+    expect((await post('allocatedChecklists/C1/action/forceClose')).status).toBe(404);
+    expect((await post('planBalances/action/byDate')).status).toBe(404);
+    const projected = await post('absences/action/loadProjectedBalance');
+    expect(projected.status).toBe(200);
+    const body = (await projected.json()) as { projectedBalance?: number };
+    expect(body.projectedBalance).toBeDefined();
+  });
+
+  it('serves official atomservlet and 404s unknown feeds / resources atomfeeds', async () => {
+    const emp = await fetch(atom('employee/empupdate'), { headers: auth() });
+    expect(emp.status).toBe(200);
+    const bad = await fetch(atom('employee/workers'), { headers: auth() });
+    expect(bad.status).toBe(404);
+    const resRoot = await fetch(resources('atomfeeds'), { headers: auth() });
+    expect(resRoot.status).toBe(404);
   });
 });

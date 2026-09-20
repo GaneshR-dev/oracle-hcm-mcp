@@ -16,6 +16,8 @@ import {
   bindExecutor,
   recordAudit,
   requireApprovalToken,
+  listWorkerAssignments,
+  patchWorkerAssignment,
 } from './helpers.js';
 import {
   getFieldMap,
@@ -84,79 +86,30 @@ export function registerV06Tools(server: McpServer, ctx: ToolContext): void {
 
 function registerPerformance(server: McpServer, ctx: ToolContext): void {
   server.registerTool(
-    'hcm_search_review_cycles',
-    {
-      description: 'Search performance review cycles. Example: { "q": "Status=OPEN" }',
-      inputSchema: listArgs,
-      annotations: { readOnlyHint: true },
-    },
-    listHandler(ctx, 'reviewCycles', 'hcm_search_review_cycles'),
-  );
-  server.registerTool(
-    'hcm_get_review_cycle',
-    {
-      description: 'Get a review cycle by id.',
-      inputSchema: { reviewCycleId: z.string() },
-      annotations: { readOnlyHint: true },
-    },
-    getHandler(ctx, 'reviewCycles', 'reviewCycleId', 'hcm_get_review_cycle'),
-  );
-  server.registerTool(
-    'hcm_search_feedback',
-    {
-      description: 'Search performance feedback records.',
-      inputSchema: listArgs,
-      annotations: { readOnlyHint: true },
-    },
-    listHandler(ctx, 'performanceFeedback', 'hcm_search_feedback'),
-  );
-  server.registerTool(
-    'hcm_get_feedback',
-    {
-      description: 'Get feedback by id.',
-      inputSchema: { feedbackId: z.string() },
-      annotations: { readOnlyHint: true },
-    },
-    getHandler(ctx, 'performanceFeedback', 'feedbackId', 'hcm_get_feedback'),
-  );
-  bindExecutor(ctx, 'hcm_create_feedback', async (args) =>
-    ctx.client.postJson('performanceFeedback', args.body ?? args),
-  );
-  server.registerTool(
-    'hcm_create_feedback',
-    {
-      description:
-        'Create performance feedback (approval-gated unless --write). Example: { "body": { "PersonNumber": "P1001", "Comments": "Nice work" } }',
-      inputSchema: { body: z.record(z.unknown()) },
-      annotations: { readOnlyHint: false },
-    },
-    async (args) => gateWrite(ctx, 'hcm_create_feedback', args),
-  );
-  server.registerTool(
     'hcm_search_check_ins',
     {
-      description: 'Search manager/employee check-ins.',
+      description: 'Search manager/employee check-in documents (official checkInDocuments).',
       inputSchema: listArgs,
       annotations: { readOnlyHint: true },
     },
-    listHandler(ctx, 'checkIns', 'hcm_search_check_ins'),
+    listHandler(ctx, 'checkInDocuments', 'hcm_search_check_ins'),
   );
   server.registerTool(
     'hcm_get_check_in',
     {
-      description: 'Get a check-in by id.',
+      description: 'Get a check-in document by id.',
       inputSchema: { checkInId: z.string() },
       annotations: { readOnlyHint: true },
     },
-    getHandler(ctx, 'checkIns', 'checkInId', 'hcm_get_check_in'),
+    getHandler(ctx, 'checkInDocuments', 'checkInId', 'hcm_get_check_in'),
   );
   bindExecutor(ctx, 'hcm_create_check_in', async (args) =>
-    ctx.client.postJson('checkIns', args.body ?? args),
+    ctx.client.postJson('checkInDocuments', args.body ?? args),
   );
   server.registerTool(
     'hcm_create_check_in',
     {
-      description: 'Schedule a check-in (approval-gated unless --write).',
+      description: 'Create a check-in document (approval-gated unless --write).',
       inputSchema: { body: z.record(z.unknown()) },
       annotations: { readOnlyHint: false },
     },
@@ -172,29 +125,57 @@ function registerLearningDepth(server: McpServer, ctx: ToolContext): void {
       inputSchema: listArgs,
       annotations: { readOnlyHint: true },
     },
-    listHandler(ctx, 'learningAssignments', 'hcm_search_learning_assignments'),
+    listHandler(ctx, 'learnerLearningRecords', 'hcm_search_learning_assignments'),
   );
   server.registerTool(
     'hcm_get_learning_assignment',
     {
-      description: 'Get a learning assignment by id.',
+      description: 'Get a learning record by id (official learnerLearningRecords).',
       inputSchema: { assignmentId: z.string() },
       annotations: { readOnlyHint: true },
     },
-    getHandler(ctx, 'learningAssignments', 'assignmentId', 'hcm_get_learning_assignment'),
+    getHandler(ctx, 'learnerLearningRecords', 'assignmentId', 'hcm_get_learning_assignment'),
   );
   server.registerTool(
     'hcm_list_learning_completions',
     {
-      description: 'List learning completions.',
+      description: 'List learning completions via learnerLearningRecords child/completionDetails.',
       inputSchema: listArgs,
       annotations: { readOnlyHint: true },
     },
-    listHandler(ctx, 'learningCompletions', 'hcm_list_learning_completions'),
+    async (args) =>
+      runRead(async () => {
+        const recs = await ctx.client.list('learnerLearningRecords', {
+          q: args.q, finder: args.finder, limit: args.limit ?? 25, offset: args.offset ?? 0,
+        });
+        const items: Record<string, unknown>[] = [];
+        for (const r of recs.items as { LearningRecordId?: string; completionDetails?: Record<string, unknown>[] }[]) {
+          if (Array.isArray(r.completionDetails)) {
+            for (const c of r.completionDetails) items.push({ ...c, LearningRecordId: r.LearningRecordId });
+          } else if (r.LearningRecordId) {
+            try {
+              const child = await ctx.client.list(
+                `learnerLearningRecords/${encodeURIComponent(r.LearningRecordId)}/child/completionDetails`,
+              );
+              for (const c of child.items as Record<string, unknown>[]) {
+                items.push({ ...c, LearningRecordId: r.LearningRecordId });
+              }
+            } catch {
+              /* skip */
+            }
+          }
+        }
+        return { items, count: items.length, hasMore: false };
+      }, ctx, 'hcm_list_learning_completions'),
   );
-  bindExecutor(ctx, 'hcm_record_learning_completion', async (args) =>
-    ctx.client.postJson('learningCompletions', args.body ?? args),
-  );
+  bindExecutor(ctx, 'hcm_record_learning_completion', async (args) => {
+    const body = (args.body ?? args) as Record<string, unknown>;
+    const recId = String(body.LearningRecordId ?? body.learningRecordId ?? 'LC1R');
+    return ctx.client.postJson(
+      `learnerLearningRecords/${encodeURIComponent(recId)}/child/completionDetails`,
+      body,
+    );
+  });
   server.registerTool(
     'hcm_record_learning_completion',
     {
@@ -241,10 +222,10 @@ function registerCompensationPacks(server: McpServer, ctx: ToolContext): void {
     );
   };
 
-  sensList('hcm_search_salary_bases', 'salaryBases', 'Search salary bases.');
-  sensGet('hcm_get_salary_basis', 'salaryBases', 'salaryBasisId', 'Get salary basis.');
-  sensList('hcm_search_grade_steps', 'gradeSteps', 'Search grade steps LOV.');
-  sensGet('hcm_get_grade_step', 'gradeSteps', 'gradeStepId', 'Get grade step.');
+  sensList('hcm_search_salary_bases', 'salaryBasisLov', 'Search salary bases (official salaryBasisLov).');
+  sensGet('hcm_get_salary_basis', 'salaryBasisLov', 'salaryBasisId', 'Get salary basis.');
+  sensList('hcm_search_grade_steps', 'gradeStepsLOV', 'Search grade steps LOV (official gradeStepsLOV).');
+  sensGet('hcm_get_grade_step', 'gradeStepsLOV', 'gradeStepId', 'Get grade step.');
 
   bindExecutor(ctx, 'hcm_get_offer_letter_fields', async (args) => {
     const offer = (await ctx.client.getJson(
@@ -279,11 +260,22 @@ function registerWorkforceStructures(server: McpServer, ctx: ToolContext): void 
   server.registerTool(
     'hcm_search_departments',
     {
-      description: 'Search departments (workforce structures).',
+      description: 'Search departments (organizations filtered by ClassificationCode=DEPT).',
       inputSchema: listArgs,
       annotations: { readOnlyHint: true },
     },
-    listHandler(ctx, 'departments', 'hcm_search_departments'),
+    async (args) =>
+      runRead(
+        () =>
+          ctx.client.list('organizations', {
+            q: args.q ?? 'ClassificationCode=DEPT',
+            finder: args.finder ?? 'findByClassification',
+            limit: args.limit ?? 25,
+            offset: args.offset ?? 0,
+          }),
+        ctx,
+        'hcm_search_departments',
+      ),
   );
   server.registerTool(
     'hcm_get_department_tree',
@@ -451,7 +443,7 @@ function registerJourneys(server: McpServer, ctx: ToolContext): void {
     async (args) =>
       runRead(
         () =>
-          ctx.client.list('journeyTasks', {
+          ctx.client.list('workerJourneyTasks', {
             q: args.journeyId ? `JourneyId=${args.journeyId}` : args.q,
             finder: args.finder,
             limit: args.limit ?? 25,
@@ -463,7 +455,7 @@ function registerJourneys(server: McpServer, ctx: ToolContext): void {
   );
   bindExecutor(ctx, 'hcm_update_journey_task', async (args) =>
     ctx.client.patchJson(
-      `journeyTasks/${encodeURIComponent(String(args.journeyTaskId))}`,
+      `workerJourneyTasks/${encodeURIComponent(String(args.journeyTaskId))}`,
       args.body,
     ),
   );
@@ -489,7 +481,7 @@ function registerAbsenceEnhancements(server: McpServer, ctx: ToolContext): void 
     },
     async (args) =>
       runRead(
-        () => ctx.client.postJson('absences/action/previewEntitlement', args.body ?? args),
+        () => ctx.client.postJson('absences/action/loadProjectedBalance', args.body ?? args),
         ctx,
         'hcm_preview_entitlement_calc',
       ),
@@ -506,10 +498,14 @@ function registerAbsenceEnhancements(server: McpServer, ctx: ToolContext): void 
     },
     async (args) =>
       runRead(async () => {
-        const q = new URLSearchParams();
-        q.set('asOf', args.asOf);
-        if (args.personNumber) q.set('personNumber', args.personNumber);
-        return ctx.client.getJson(`planBalances/action/byDate?${q.toString()}`);
+        const finder = `findByBalanceAsOfDate;balanceAsOfDate=${args.asOf}${
+          args.personNumber ? `,PersonNumber=${args.personNumber}` : ''
+        }`;
+        return ctx.client.list('planBalances', {
+          finder,
+          q: args.personNumber ? `personNumber=${args.personNumber}` : undefined,
+          limit: 50,
+        });
       }, ctx, 'hcm_accrual_balances_by_date'),
   );
   server.registerTool(
@@ -519,16 +515,16 @@ function registerAbsenceEnhancements(server: McpServer, ctx: ToolContext): void 
       inputSchema: listArgs,
       annotations: { readOnlyHint: true },
     },
-    listHandler(ctx, 'absenceTypes', 'hcm_list_absence_type_lov'),
+    listHandler(ctx, 'absenceTypesLOV', 'hcm_list_absence_type_lov'),
   );
   server.registerTool(
     'hcm_list_absence_plan_lov',
     {
-      description: 'Absence plan LOV (finish plan LOV coverage).',
+      description: 'Absence plan LOV via official absencePlansLOV (not an invented absencePlans collection).',
       inputSchema: listArgs,
       annotations: { readOnlyHint: true },
     },
-    listHandler(ctx, 'absencePlans', 'hcm_list_absence_plan_lov'),
+    listHandler(ctx, 'absencePlansLOV', 'hcm_list_absence_plan_lov'),
   );
 }
 
@@ -553,12 +549,9 @@ function registerRecipesV06(server: McpServer, ctx: ToolContext): void {
     const workerId = String(args.workerId);
     const body = (args.body ?? {}) as Record<string, unknown>;
     const worker = await ctx.client.getJson(`workers/${encodeURIComponent(workerId)}`);
-    const asgList = await ctx.client.list('workerAssignments', {
-      q: adfEquals('WorkerId', workerId),
-      limit: 5,
-    });
-    const assignmentId = resolveAssignmentId(args, asgList.items ?? [], 'transfer');
-    const updated = await ctx.client.patchJson(`workerAssignments/${encodeURIComponent(assignmentId)}`, {
+    const { items } = await listWorkerAssignments(ctx.client, workerId);
+    const assignmentId = resolveAssignmentId(args, items, 'transfer');
+    const updated = await patchWorkerAssignment(ctx.client, workerId, assignmentId, {
       OrganizationId: body.OrganizationId ?? body.organizationId,
       LocationId: body.LocationId ?? body.locationId,
       JobId: body.JobId ?? body.jobId,
@@ -584,12 +577,9 @@ function registerRecipesV06(server: McpServer, ctx: ToolContext): void {
 
   bindExecutor(ctx, 'hcm_recipe_terminate', async (args) => {
     const workerId = String(args.workerId);
-    const asgList = await ctx.client.list('workerAssignments', {
-      q: adfEquals('WorkerId', workerId),
-      limit: 5,
-    });
-    const assignmentId = resolveAssignmentId(args, asgList.items ?? [], 'terminate');
-    const updated = await ctx.client.patchJson(`workerAssignments/${encodeURIComponent(assignmentId)}`, {
+    const { items } = await listWorkerAssignments(ctx.client, workerId);
+    const assignmentId = resolveAssignmentId(args, items, 'terminate');
+    const updated = await patchWorkerAssignment(ctx.client, workerId, assignmentId, {
       AssignmentStatusType: 'INACTIVE',
       ActionCode: 'TERMINATION',
       TerminationDate: args.terminationDate ?? new Date().toISOString().slice(0, 10),
@@ -613,13 +603,10 @@ function registerRecipesV06(server: McpServer, ctx: ToolContext): void {
 
   bindExecutor(ctx, 'hcm_recipe_promote', async (args) => {
     const workerId = String(args.workerId);
-    const asgList = await ctx.client.list('workerAssignments', {
-      q: adfEquals('WorkerId', workerId),
-      limit: 5,
-    });
-    const assignmentId = resolveAssignmentId(args, asgList.items ?? [], 'promote');
+    const { items } = await listWorkerAssignments(ctx.client, workerId);
+    const assignmentId = resolveAssignmentId(args, items, 'promote');
     const body = (args.body ?? {}) as Record<string, unknown>;
-    const updated = await ctx.client.patchJson(`workerAssignments/${encodeURIComponent(assignmentId)}`, {
+    const updated = await patchWorkerAssignment(ctx.client, workerId, assignmentId, {
       GradeId: body.GradeId ?? body.gradeId,
       JobId: body.JobId ?? body.jobId,
       ActionCode: 'PROMOTION',
@@ -980,56 +967,48 @@ function inferDomain(toolName: string): string {
 
 function registerNiceLater(server: McpServer, ctx: ToolContext): void {
   server.registerTool(
-    'hcm_otbi_query',
+    'hcm_search_benefit_dependents',
     {
-      description:
-        'Thin OTBI/analytics read stub — lists known report catalog entries (dummy) or allowlisted otbiReports. Not full BI Publisher.',
-      inputSchema: {
-        reportPath: z.string().optional(),
-        limit: z.number().int().positive().optional(),
-      },
+      description: 'Search benefits dependents via benefitEnrollments/{id}/child/dependents.',
+      inputSchema: { ...listArgs, enrollmentId: z.string().optional() },
       annotations: { readOnlyHint: true },
     },
     async (args) =>
       runRead(async () => {
-        try {
-          const list = await ctx.client.list('otbiReports', { limit: args.limit ?? 25 });
-          return {
-            ...list,
-            reportPath: args.reportPath ?? null,
-            note: 'Thin catalog read only — not OTBI execute. Unofficial.',
-          };
-        } catch (e) {
-          return {
-            items: [],
-            error: e instanceof Error ? e.message : String(e),
-            note: 'otbiReports may be unavailable on this pod.',
-          };
+        const enrollments = await ctx.client.list('benefitEnrollments', {
+          q: args.q,
+          limit: args.limit ?? 25,
+          offset: args.offset ?? 0,
+        });
+        const items: Record<string, unknown>[] = [];
+        const wanted = args.enrollmentId ? [args.enrollmentId] : (enrollments.items as { EnrollmentId?: string }[]).map((e) => e.EnrollmentId).filter(Boolean) as string[];
+        for (const id of wanted) {
+          try {
+            const child = await ctx.client.list(
+              `benefitEnrollments/${encodeURIComponent(id)}/child/dependents`,
+            );
+            for (const d of child.items as Record<string, unknown>[]) {
+              items.push({ ...d, EnrollmentId: id });
+            }
+          } catch {
+            /* skip */
+          }
         }
-      }, ctx, 'hcm_otbi_query'),
-  );
-
-  server.registerTool(
-    'hcm_search_benefit_dependents',
-    {
-      description: 'Search benefits dependents.',
-      inputSchema: listArgs,
-      annotations: { readOnlyHint: true },
-    },
-    listHandler(ctx, 'benefitDependents', 'hcm_search_benefit_dependents'),
+        return { items, count: items.length, hasMore: false };
+      }, ctx, 'hcm_search_benefit_dependents'),
   );
   server.registerTool(
     'hcm_search_life_events',
     {
-      description: 'Search benefits life events.',
+      description: 'Search life events LOV (official lifeEventsLOV).',
       inputSchema: listArgs,
       annotations: { readOnlyHint: true },
     },
-    listHandler(ctx, 'lifeEvents', 'hcm_search_life_events'),
+    listHandler(ctx, 'lifeEventsLOV', 'hcm_search_life_events'),
   );
 
   bindExecutor(ctx, 'hcm_search_payroll_costing', async (args) =>
-    ctx.client.list('payrollCosting', {
+    ctx.client.list('assignmentCosting', {
       q: args.q as string | undefined,
       limit: (args.limit as number) ?? 25,
       offset: (args.offset as number) ?? 0,
@@ -1091,15 +1070,15 @@ function registerNiceLater(server: McpServer, ctx: ToolContext): void {
       inputSchema: listArgs,
       annotations: { readOnlyHint: true },
     },
-    listHandler(ctx, 'talentPools', 'hcm_search_talent_pools'),
+    listHandler(ctx, 'talentPoolsLOV', 'hcm_search_talent_pools'),
   );
   server.registerTool(
     'hcm_get_talent_pool',
     {
-      description: 'Get talent pool by id.',
+      description: 'Get talent pool LOV by id (official talentPoolsLOV).',
       inputSchema: { talentPoolId: z.string() },
       annotations: { readOnlyHint: true },
     },
-    getHandler(ctx, 'talentPools', 'talentPoolId', 'hcm_get_talent_pool'),
+    getHandler(ctx, 'talentPoolsLOV', 'talentPoolId', 'hcm_get_talent_pool'),
   );
 }

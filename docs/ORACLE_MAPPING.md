@@ -1,44 +1,59 @@
-# Oracle HCM REST mapping (curated)
+# Oracle HCM REST mapping (official 11.13.18.05 only)
 
-Unofficial mapping for v0.2 tools. **Not** a complete ADF resource catalog.
+Unofficial MCP mapping. **Not** a complete ADF catalog.
 Docs: https://docs.oracle.com/en/cloud/saas/human-resources/farws/rest-endpoints.html
 
-Base: `{ORACLE_HCM_BASE_URL}/resources/{ORACLE_HCM_API_VERSION}/`
-Default version: `11.13.18.05`
+Resources: `{ORACLE_HCM_BASE_URL}/resources/11.13.18.05/{collection}`
+Atom: `{ORACLE_HCM_BASE_URL}/atomservlet/{workspace}/{collection}` (not under `resources/`)
 
-| MCP tool / domain | Fusion REST path |
-|-------------------|------------------|
-| workers | `workers`, `workers/{WorkerId}` |
-| worker assignments | `workers/{id}?expand=workRelationships.assignments`, `workerAssignments` |
-| absences | `absences`, `absences/{AbsenceId}` |
-| absence / plan balances | **`planBalances`** (legacy `absencesBalances` aliased in dummy/allowlist) |
+| MCP domain | Official Fusion path |
+|------------|----------------------|
+| workers | `workers`, `workers/{id}` |
+| assignments | `workers/{id}?expand=workRelationships.assignments` and nested `…/child/workRelationships/{wr}/child/assignments/{asg}` |
+| emails / phones / NIDs / legislative | `workers/{id}/child/{emails\|phones\|nationalIdentifiers\|legislativeInfo}` |
+| addresses / names / photos / visas / passports / … | `workers/{id}/child/{addresses\|names\|photos\|citizenships\|visasPermits\|passports\|disabilities\|driverLicenses\|ethnicities\|religions\|externalIdentifiers\|otherCommunicationAccounts\|messages}` |
+| assignment grade steps | `workers/{id}/child/workRelationships/{wr}/child/assignments/{asg}/child/gradeSteps` |
+| absences | `absences`; projected balance `POST absences/action/loadProjectedBalance` |
+| plan balances | `planBalances` finder `findByBalanceAsOfDate` |
+| absence LOVs | `absenceTypesLOV`, `absencePlansLOV` |
 | AOR | `areasOfResponsibility` |
-| checklists | `allocatedChecklists` |
-| checklist tasks | `allocatedChecklists/{id}/child/allocatedTasks` |
-| task status | `…/child/allocatedTasks/{taskId}/action/updateTaskStatus` (POST) |
-| BP notifications | **`businessProcessNotifications`** (legacy `workflowNotifications` aliased) |
-| BP action | `businessProcessNotifications/action/performAction` (POST) |
-| organizations | `organizations` |
-| locations | `locations` |
-| jobs | `jobs` |
-| grades | `grades` (optional) |
-| time | `timeRecords` (read-focused) |
+| checklists | `allocatedChecklists`; `POST …/action/allocateChecklist`; tasks `child/allocatedTasks` + `action/updateTaskStatus` |
+| BP notifications | `businessProcessNotifications` + `POST …/action/performAction` |
+| orgs / jobs / grades / positions | `organizations`, `jobs`, `grades`, `positions`, `jobFamilies`; LOVs `jobsLov`, `gradesLov`, `gradeLaddersLov`, `gradeRatesLOV`, `locationsLov` |
+| locations | `locations` and `locationsV2` |
+| time | `timeRecordGroups` + `child/timeRecords`; submit `POST timeRecordEventRequests`; clock `timeEventRequests` |
+| schedules | `workforceScheduleDefinitions` |
 | talent profiles | `talentPersonProfiles` |
-| payroll | `payrollRelationships` (MCP read-only) |
+| payroll | `payrollRelationships` (read); costing `assignmentCosting` / `payrollRelationshipCosting` |
+| recruiting | `recruitingJobRequisitions` (+ `child/{skills\|attachments\|publishedJobs}`), `recruitingCandidates` (+ `child/{attachments\|citizenships}`), `recruitingJobOffers` |
+| benefits | `benefitEnrollments` (+ `child/{dependents\|costs\|providers}`); LOV `lifeEventsLOV` |
+| goals | `goalPlans` + `child/performanceGoals` |
+| performance | `performanceEvaluations`, `checkInDocuments` |
+| learning | `learnerLearningRecords` + `child/completionDetails` |
+| journeys | `workerJourneys` + `child/tasks`, `workerJourneyTasks` |
+| documents | `documentRecords`; actions `downloadAttachments`, `generateDraftLetter`, `findByAdvancedSearchQuery` |
+| compensation | `salaries`, `salaryBasisLov`, `gradeStepsLOV` (SENSITIVE) |
+| payslips / payment methods | `payslips`, `personalPaymentMethods` (SENSITIVE) |
+| Atom CDC | `/hcmRestApi/atomservlet/employee/{newhire\|empassignment\|empupdate\|payupdate\|termination\|workrelshipupdate}` and `workstructures/{grades\|jobs\|locations\|positions\|position}` |
 
-Field names and finders vary by Fusion release and customizations. The MCP client sends JSON as provided; it does not rewrite LOVs or DFF segments.
+## Dropped (no public HCM REST equivalent)
 
-Auth:
+Invented collections/actions are **not** allowlisted; dummy **404**s them:
 
-- **Basic** — common for integration users in lower environments
-- **OAuth client-credentials** — IDCS token URL + client id/secret → Bearer
-- **Bearer** — pre-obtained access token
+- `atomfeeds` as a `resources/` root (use atomservlet)
+- `workerAssignments`, `timeRecords`, `timeCards`, `workSchedules`
+- `bankAccounts` (FSCM `externalBankAccounts` — out of HCM)
+- `reviewCycles`, `performanceFeedback`, `otbiReports`
+- `recruitingInterviews`
+- `absencePlans` as a collection (`absencePlansLOV` is the official LOV)
+- `benefitEnrollments/action/enroll` / `optOut`
+- `timeCards/action/validate\|submit`
+- `absences/action/previewEntitlement` (use `loadProjectedBalance`)
+- `planBalances/action/byDate` (use finder `findByBalanceAsOfDate`)
+- `allocatedChecklists/.../action/forceClose`
 
-HCM **RBAC** always applies on the real server regardless of MCP mode.
+MCP **tool names** stay stable where a Fusion equivalent exists; only internals were remapped.
 
-## MCP tool name stability
+Field names and finders vary by Fusion release. The MCP client sends JSON as provided.
 
-Curated tool names such as `hcm_absence_balance`, `hcm_list_notifications`, and
-`hcm_update_task_status` are **stable** for Cursor MCP wiring. Internals were
-realigned to Fusion path names above; legacy roots remain on the allowlist and
-dummy for compatibility.
+Auth: Basic, OAuth client-credentials, Bearer. HCM **RBAC** always applies on the real server.

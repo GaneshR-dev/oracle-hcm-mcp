@@ -190,7 +190,7 @@ describe('v0.3 tools against dummy', () => {
     });
   });
 
-  it('submit time card pending; force close checklist pending', async () => {
+  it('submit time card pending via timeRecordEventRequests', async () => {
     await withClient(cfg({ writeMode: true }), async (client) => {
       const tc = parse(
         await client.callTool({
@@ -199,13 +199,6 @@ describe('v0.3 tools against dummy', () => {
         }),
       );
       expect(tc.Status).toBe('SUBMITTED');
-      const closed = parse(
-        await client.callTool({
-          name: 'hcm_force_close_checklist',
-          arguments: { checklistId: 'C1' },
-        }),
-      );
-      expect(closed.forceClosed).toBe(true);
     });
   });
 });

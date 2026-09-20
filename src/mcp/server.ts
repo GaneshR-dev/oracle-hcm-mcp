@@ -12,7 +12,7 @@ import type { ToolContext } from './tools/helpers.js';
 
 export const SERVER_INFO = {
   name: 'oracle-hcm-mcp',
-  version: '0.7.0',
+  version: '0.9.0',
   title: 'Unofficial Oracle HCM MCP',
 };
 

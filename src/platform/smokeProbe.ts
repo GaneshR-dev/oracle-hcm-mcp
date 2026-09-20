@@ -1,5 +1,5 @@
 /**
- * Live Fusion smoke profile — probe matrix of curated resources,
+ * Live Fusion smoke profile — probe matrix of official 11.13.18.05 resources,
  * recording HTTP status classes (200 / 403 / 404) per env.
  * Results saved under ORACLE_HCM_SMOKE_DIR or ~/.oracle-hcm-mcp/smoke/.
  * Unofficial — not an Oracle health product.
@@ -34,38 +34,45 @@ export type SmokeReport = {
   note: string;
 };
 
+/** Official Fusion HCM REST collection roots only (no invented aliases). */
 export const SMOKE_PROBE_PATHS: { resource: string; path: string }[] = [
   { resource: 'workers', path: 'workers?limit=1' },
+  { resource: 'publicWorkers', path: 'publicWorkers?limit=1' },
   { resource: 'absences', path: 'absences?limit=1' },
   { resource: 'planBalances', path: 'planBalances?limit=1' },
   { resource: 'organizations', path: 'organizations?limit=1' },
   { resource: 'locations', path: 'locations?limit=1' },
+  { resource: 'locationsV2', path: 'locationsV2?limit=1' },
   { resource: 'jobs', path: 'jobs?limit=1' },
   { resource: 'grades', path: 'grades?limit=1' },
+  { resource: 'jobFamilies', path: 'jobFamilies?limit=1' },
+  { resource: 'positions', path: 'positions?limit=1' },
   { resource: 'businessProcessNotifications', path: 'businessProcessNotifications?limit=1' },
   { resource: 'allocatedChecklists', path: 'allocatedChecklists?limit=1' },
-  { resource: 'timeRecords', path: 'timeRecords?limit=1' },
-  { resource: 'timeCards', path: 'timeCards?limit=1' },
+  { resource: 'timeRecordGroups', path: 'timeRecordGroups?limit=1' },
+  { resource: 'timeRecordEventRequests', path: 'timeRecordEventRequests?limit=1' },
+  { resource: 'workforceScheduleDefinitions', path: 'workforceScheduleDefinitions?limit=1' },
   { resource: 'recruitingJobRequisitions', path: 'recruitingJobRequisitions?limit=1' },
   { resource: 'recruitingCandidates', path: 'recruitingCandidates?limit=1' },
   { resource: 'recruitingJobOffers', path: 'recruitingJobOffers?limit=1' },
-  { resource: 'recruitingInterviews', path: 'recruitingInterviews?limit=1' },
   { resource: 'benefitEnrollments', path: 'benefitEnrollments?limit=1' },
-  { resource: 'atomfeeds', path: 'atomfeeds?limit=1' },
-  { resource: 'workerLegislativeData', path: 'workerLegislativeData?limit=1' },
-  { resource: 'goals', path: 'goals?limit=1' },
-  { resource: 'learningEnrollments', path: 'learningEnrollments?limit=1' },
-  { resource: 'compensationHistories', path: 'compensationHistories?limit=1' },
-  { resource: 'absenceTypes', path: 'absenceTypes?limit=1' },
-  { resource: 'absencePlans', path: 'absencePlans?limit=1' },
-  { resource: 'payslips', path: 'payslips?limit=1' },
-  { resource: 'reviewCycles', path: 'reviewCycles?limit=1' },
-  { resource: 'learningAssignments', path: 'learningAssignments?limit=1' },
-  { resource: 'salaryBases', path: 'salaryBases?limit=1' },
-  { resource: 'jobFamilies', path: 'jobFamilies?limit=1' },
+  { resource: 'goalPlans', path: 'goalPlans?limit=1' },
+  { resource: 'performanceEvaluations', path: 'performanceEvaluations?limit=1' },
+  { resource: 'checkInDocuments', path: 'checkInDocuments?limit=1' },
+  { resource: 'learnerLearningRecords', path: 'learnerLearningRecords?limit=1' },
+  { resource: 'absenceTypesLOV', path: 'absenceTypesLOV?limit=1' },
+  { resource: 'absencePlansLOV', path: 'absencePlansLOV?limit=1' },
+  { resource: 'salaryBasisLov', path: 'salaryBasisLov?limit=1' },
   { resource: 'documentRecords', path: 'documentRecords?limit=1' },
   { resource: 'workerJourneys', path: 'workerJourneys?limit=1' },
-  { resource: 'talentPools', path: 'talentPools?limit=1' },
+  { resource: 'talentPoolsLOV', path: 'talentPoolsLOV?limit=1' },
+  { resource: 'payslips', path: 'payslips?limit=1' },
+  { resource: 'timeEventRequests', path: 'timeEventRequests?limit=1' },
+  { resource: 'jobsLov', path: 'jobsLov?limit=1' },
+  { resource: 'gradesLov', path: 'gradesLov?limit=1' },
+  { resource: 'gradeLaddersLov', path: 'gradeLaddersLov?limit=1' },
+  { resource: 'gradeRatesLOV', path: 'gradeRatesLOV?limit=1' },
+  { resource: 'locationsLov', path: 'locationsLov?limit=1' },
 ];
 
 function classify(status: number | null): SmokeStatusClass {
@@ -137,7 +144,7 @@ export async function runSmokeProbe(
     summary,
     rows,
     unofficial: true,
-    note: 'Tenant probe matrix — 200=reachable, 403=RBAC deny, 404=missing on pod. Not an Oracle product.',
+    note: 'Tenant probe matrix — 200=reachable, 403=RBAC deny, 404=missing on pod. Official 11.13.18.05 roots only. Not an Oracle product.',
   };
 }
 

@@ -1,6 +1,6 @@
 /**
  * Curated Fusion ADF finder catalog for LOV / collection resources.
- * Unofficial — not exhaustive of every Fusion release; expands common finders.
+ * Unofficial — not exhaustive of every Fusion release; official collection names only.
  */
 
 export type FinderParam = {
@@ -19,9 +19,8 @@ export type FinderDef = {
   dummyMatch?: Record<string, string>;
 };
 
-/** Common finders across workers / absences / orgs / locations / jobs / grades / positions / payroll */
+/** Common finders across official 11.13.18.05 collections */
 export const FINDER_CATALOG: FinderDef[] = [
-  // workers
   {
     name: 'findByPersonNumber',
     resource: 'workers',
@@ -50,7 +49,6 @@ export const FINDER_CATALOG: FinderDef[] = [
     params: [{ name: 'ManagerPersonNumber', type: 'string', required: true }],
     dummyMatch: { ManagerPersonNumber: 'ManagerPersonNumber' },
   },
-  // absences
   {
     name: 'findByPersonNumber',
     resource: 'absences',
@@ -85,7 +83,28 @@ export const FINDER_CATALOG: FinderDef[] = [
     ],
     dummyMatch: { PersonNumber: 'PersonNumber' },
   },
-  // organizations
+  {
+    name: 'findByBalanceAsOfDate',
+    resource: 'planBalances',
+    description: 'Official plan-balance as-of-date finder',
+    params: [
+      { name: 'balanceAsOfDate', type: 'date', required: true },
+      { name: 'PersonNumber', type: 'string', required: false },
+    ],
+    dummyMatch: { PersonNumber: 'personNumber' },
+  },
+  {
+    name: 'findByPersonIdPlanIdLevelDate',
+    resource: 'planBalances',
+    description: 'Official plan-balance by person / plan / date',
+    params: [
+      { name: 'PersonId', type: 'string', required: false },
+      { name: 'PersonNumber', type: 'string', required: false },
+      { name: 'PlanId', type: 'string', required: false },
+      { name: 'balanceAsOfDate', type: 'date', required: false },
+    ],
+    dummyMatch: { PersonNumber: 'personNumber' },
+  },
   {
     name: 'findByOrganizationName',
     resource: 'organizations',
@@ -107,7 +126,6 @@ export const FINDER_CATALOG: FinderDef[] = [
     params: [{ name: 'ParentOrganizationId', type: 'string', required: true }],
     dummyMatch: { ParentOrganizationId: 'ParentOrganizationId' },
   },
-  // locations
   {
     name: 'findByCountry',
     resource: 'locations',
@@ -129,7 +147,13 @@ export const FINDER_CATALOG: FinderDef[] = [
     params: [{ name: 'TownOrCity', type: 'string', required: true }],
     dummyMatch: { TownOrCity: 'TownOrCity' },
   },
-  // jobs / grades / positions
+  {
+    name: 'findByCountry',
+    resource: 'locationsV2',
+    description: 'Locations V2 by country code',
+    params: [{ name: 'Country', type: 'string', required: true }],
+    dummyMatch: { Country: 'Country' },
+  },
   {
     name: 'findByJobCode',
     resource: 'jobs',
@@ -165,22 +189,13 @@ export const FINDER_CATALOG: FinderDef[] = [
     params: [{ name: 'OrganizationId', type: 'string', required: true }],
     dummyMatch: { OrganizationId: 'OrganizationId' },
   },
-  // absence types / plans
   {
     name: 'findByName',
-    resource: 'absenceTypes',
+    resource: 'absenceTypesLOV',
     description: 'Absence type by name',
     params: [{ name: 'Name', type: 'string', required: true }],
     dummyMatch: { Name: 'Name' },
   },
-  {
-    name: 'findByPlanName',
-    resource: 'absencePlans',
-    description: 'Absence plan by name',
-    params: [{ name: 'PlanName', type: 'string', required: true }],
-    dummyMatch: { PlanName: 'PlanName' },
-  },
-  // payroll / public
   {
     name: 'findByPersonNumber',
     resource: 'payrollRelationships',
@@ -195,7 +210,6 @@ export const FINDER_CATALOG: FinderDef[] = [
     params: [{ name: 'DisplayName', type: 'string', required: true }],
     dummyMatch: { DisplayName: 'DisplayName' },
   },
-  // recruiting
   {
     name: 'findByRequisitionNumber',
     resource: 'recruitingJobRequisitions',
@@ -250,7 +264,6 @@ export function applyFinderFilter<T extends Record<string, unknown>>(
   const { name, params } = parseFinderExpression(finder);
   const def = describeFinder(resource, name);
   if (!def?.dummyMatch) {
-    // Fallback: try params as direct field equality
     return items.filter((it) =>
       Object.entries(params).every(([k, v]) => String(it[k] ?? '') === v || String(it[k] ?? '').includes(v)),
     );
